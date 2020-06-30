@@ -3,11 +3,11 @@ import numpy as np
 import cv2
 import os
 import pandas as pd
-import torchvision
 
 from pathlib import Path
 from tqdm import tqdm
-from typing import Iterable, List, Tuple, Union
+from torch.utils.data import Dataset
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 
 def make_dataset(image_dir: str, files: Iterable[str]) -> List[str]:
@@ -48,9 +48,14 @@ def bbox_str_to_numpy(bbox: str) -> np.ndarray:
     return np.array(read_bbox(bbox), dtype=np.uint16)
 
 
-class WheatDataset(torchvision.datasets.VisionDataset):
-    def __init__(self, image_dir, csv, transforms=None, transform=None, target_transform=None):
-        super(WheatDataset, self).__init__(image_dir, transforms, transform, target_transform)
+Transforms = Callable[[Any], Any]
+
+
+class WheatDataset(Dataset):
+    def __init__(self, image_dir, csv, transforms=None):
+        # type: (str, str, Optional[Transforms]) -> WheatDataset
+        super(WheatDataset, self).__init__()
+        self.transforms = transforms
 
         df = pd.read_csv(csv)
         ids = df['image_id'].unique()
@@ -70,11 +75,10 @@ class WheatDataset(torchvision.datasets.VisionDataset):
         bboxes = self.bboxes[index]
         image = cv2_imread(path)
 
-        # self.transforms is not supported due to albumentations interface
-        tfms = self.transform
-        if tfms is not None:
-            out = tfms(image=image, bboxes=bboxes)
+        if self.transforms is not None:
+            out = self.transforms(image=image, bboxes=bboxes)
             image, bboxes = out['image'], out['bboxes']
+
         return image, bboxes
 
     def __len__(self):
