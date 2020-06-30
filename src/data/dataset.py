@@ -1,6 +1,7 @@
 import numpy as np
 
 import cv2
+import logging
 import os
 import pandas as pd
 
@@ -8,6 +9,9 @@ from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
+
+
+log = logging.getLogger(__name__)
 
 
 def make_dataset(image_dir: str, files: Iterable[str]) -> List[str]:
@@ -26,8 +30,7 @@ def cv2_imread(path: Union[str, Path]) -> np.ndarray:
 
 
 def read_bbox(bbox: str, bbox_format='pascal_voc') -> Tuple[int]:
-    bb = map(float, bbox[1:-1].split(','))
-    bb = list(map(int, bb))
+    bb = [int(float(b)) for b in bbox[1:-1].split(',')]
 
     if len(bb) < 4:
         raise ValueError("Dumb bbox: {}".format(bbox))
@@ -68,12 +71,20 @@ class WheatDataset(Dataset):
             image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
             bboxes.append(image_bb)
 
+        assert len(bboxes) == len(self.images)
         self.bboxes = bboxes
 
     def __getitem__(self, index):
         path = self.images[index]
-        bboxes = self.bboxes[index]
+
+        if not os.path.exists(path):
+            # Bad luck :) Lets make another roll...
+            log.warning("Unable to read from {}".format(path))
+            index = np.random.randint(len(self))
+            return self[index]
+
         image = cv2_imread(path)
+        bboxes = self.bboxes[index]
 
         if self.transforms is not None:
             out = self.transforms(image=image, bboxes=bboxes)
