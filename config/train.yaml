@@ -1,0 +1,72 @@
+hydra:
+  run:
+    dir: /media/dmitry/data/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+general:
+  gpu: 1
+  seed: 333
+
+distributed:
+  backend: nccl
+  url: env://
+
+data:
+  # params is passed to the dataset class __init__
+  params:
+    image_dir: /media/dmitry/data/global-wheat-detection/train
+    csv: /media/dmitry/data/global-wheat-detection/train.csv
+  loader:
+    # batch size per each device
+    batch_size: 8
+    workers: 2
+  transforms:
+    flip:
+      class: albumentations.Flip
+    rotate90:
+      class: albumentations.RandomRotate90
+    resize:
+      class: albumentations.Resize
+      params:
+        height: 640
+        width: 640
+        interpolation: 3  # cv2.INTER_AREA
+    to_torch:
+      class: albumentations.pytorch.transforms.ToTensorV2
+    # FIXME: add normalization
+
+model:
+  # FIXME: use .yaml configs instead of wrappers
+  class: model.effdet.create_model
+  params:
+    model_name: tf_efficientdet_d1
+    bench_task: train
+    pretrained: false
+    pretrained_backbone: true,
+    redundant_bias: ~,
+    checkpoint_path: ''
+
+# loss inside DetTrainBench
+# TODO: maybe add option for alternative losses
+
+optim:
+  class: torch.optim.Adam
+  params:
+    lr: 0.001
+    betas: [0.9, 0.999]
+    eps: 1e-8
+  step_interval: 1
+
+train:
+  epochs: 100
+  epoch_length: -1
+
+checkpoints:
+  load: ~
+  save_dir: ~
+  interval_epoch: 1
+  interval_iteration: 500
+  max_checkpoints: 100
+
+logging:
+  model: false
+  iter_freq: 100
