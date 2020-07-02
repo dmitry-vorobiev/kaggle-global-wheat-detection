@@ -70,3 +70,7 @@ checkpoints:
 logging:
   model: false
   iter_freq: 100
+  out:
+    - loss
+    - class_loss
+    - box_loss

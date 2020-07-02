@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader, DistributedSampler
 from typing import Any, Dict, List, Optional, Tuple, Sized
 
 from data.dataset import WheatDataset
-from data.utils import collate
+from data.utils import basic_collate
 from utils.typings import Batch, Device, FloatDict
 
 Metrics = Dict[str, Metric]
@@ -70,6 +70,24 @@ def _prepare_batch(batch: Batch, device: torch.device, non_blocking: bool) -> Ba
     return convert_tensor(x, **kwargs), convert_tensor(y, **kwargs)
 
 
+def _prepare_batch_efficientdet(batch: Batch, device: Device):
+    images, bboxes = batch
+
+    # move this to collate
+    images = images.to(device).float()
+    # TODO: add GPU transforms here
+    boxes, cls = [], []
+
+    for b in bboxes:
+        c = torch.ones(len(b), device=device)
+        b = b.to(device).float()
+        boxes.append(b)
+        cls.append(c)
+
+    target = dict(bbox=boxes, cls=cls)
+    return images, target
+
+
 def create_metrics(keys: List[str], device: Device = None) -> Metrics:
     def _out_transform(kek: str):
         return lambda out: out[kek]
@@ -109,7 +127,7 @@ def create_train_loader(conf, rank=None, num_replicas=None):
                         sampler=sampler,
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
-                        collate_fn=collate,
+                        collate_fn=basic_collate,
                         drop_last=True)
     return loader
 
@@ -179,22 +197,10 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     update_freq = conf.optim.step_interval
 
     def _update(eng: Engine, batch: Batch) -> FloatDict:
-        images, bboxes = batch
-
-        # move this to collate
-        images = images.to(device).float()
-        boxes, cls = [], []
-
-        for b in bboxes:
-            c = torch.ones(len(b), device=device)
-            b = b.to(device).float()
-            boxes.append(b)
-            cls.append(c)
-
-        target = dict(bbox=boxes, cls=cls)
-        losses: Dict = net(images, target)
-        loss = losses["loss"]
+        batch = _prepare_batch_efficientdet(batch, device)
+        losses: Dict = net(*batch)
         stats = {k: v.item() for k, v in losses.items()}
+        loss = losses["loss"]
         del losses
 
         it = eng.state.iteration
@@ -206,7 +212,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
         return stats
 
-    metric_names = ['loss', 'class_loss', 'box_loss']
+    metric_names = list(conf.logging.out)
     metrics = create_metrics(metric_names, device if distributed else None)
 
     trainer = create_trainer(_update, metrics)
