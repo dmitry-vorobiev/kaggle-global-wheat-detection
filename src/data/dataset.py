@@ -4,6 +4,7 @@ import cv2
 import logging
 import os
 import pandas as pd
+import torch
 
 from pathlib import Path
 from tqdm import tqdm
@@ -55,8 +56,8 @@ Transforms = Callable[[Any], Any]
 
 
 class WheatDataset(Dataset):
-    def __init__(self, image_dir, csv, transforms=None):
-        # type: (str, str, Optional[Transforms]) -> WheatDataset
+    def __init__(self, image_dir, csv, transforms=None, show_progress=True):
+        # type: (str, str, Optional[Transforms], Optional[bool]) -> WheatDataset
         super(WheatDataset, self).__init__()
         self.transforms = transforms
 
@@ -65,8 +66,11 @@ class WheatDataset(Dataset):
         files = map(lambda x: x + '.jpg', ids)
         self.images = make_dataset(image_dir, files)
 
+        if show_progress:
+            ids = tqdm(ids, desc="Parsing bboxes...")
+
         bboxes = []
-        for image_id in tqdm(ids, desc="Parsing bboxes..."):
+        for image_id in ids:
             image_bb = df.loc[df['image_id'] == image_id, 'bbox']
             image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
             bboxes.append(image_bb)
@@ -78,9 +82,9 @@ class WheatDataset(Dataset):
         path = self.images[index]
 
         if not os.path.exists(path):
-            # Bad luck :) Lets make another roll...
             log.warning("Unable to read from {}".format(path))
             index = np.random.randint(len(self))
+            # Bad luck :) Lets make another dice roll...
             return self[index]
 
         image = cv2_imread(path)
@@ -89,7 +93,15 @@ class WheatDataset(Dataset):
         if self.transforms is not None:
             out = self.transforms(image=image, bboxes=bboxes)
             image, bboxes = out['image'], out['bboxes']
+            bboxes = np.stack(bboxes)
+        else:
+            image = torch.from_numpy(image)
+            bboxes = torch.from_numpy(bboxes)
 
+        # Remove class label and downcast from float64 to int16
+        # to send less data to GPU. Some boxes have fractional part of .5,
+        # but for high res images this shouldn't be an issue
+        bboxes = bboxes[:, :4].astype(np.int16)
         return image, bboxes
 
     def __len__(self):

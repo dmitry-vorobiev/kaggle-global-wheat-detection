@@ -28,12 +28,16 @@ from effdet import create_model
 model = create_model(
     'tf_efficientdet_d1', 
     bench_task='',
-    pretrained=True,
+    pretrained=False,
     pretrained_backbone=True,
     redundant_bias=None,
-    checkpoint_path='path/to/checkpoint'
+    checkpoint_path=''
 )
 ```
 
+One could use `pretrained=True` to get fully-pretrained on the MS COCO dataset EffDet models. In that case the classifier head 
+would contain 90 classes and should be discarded.
+
 For reference:
-[train.py](https://github.com/rwightman/efficientdet-pytorch/blob/master/train.py)
+[train.py](https://github.com/rwightman/efficientdet-pytorch/blob/master/train.py),
+[example notebook](./nbs/effdet_rwightman.ipynb)
