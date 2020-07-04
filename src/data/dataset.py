@@ -9,7 +9,7 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import Dataset
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Union
 
 
 log = logging.getLogger(__name__)
@@ -53,15 +53,31 @@ def bbox_str_to_numpy(bbox: str) -> np.ndarray:
 
 
 Transforms = Callable[[Any], Any]
+DataSource = Union[str, Sequence[str]]
+
+
+def filter_by_source(df: pd.DataFrame, source: DataSource) -> pd.DataFrame:
+    if isinstance(source, str):
+        source = [source]
+    elif isinstance(source, Iterable):
+        source = list(source)
+    elif not (isinstance(source, Sequence) or hasattr(source, '__getitem__')):
+        raise AttributeError("source should be of type Sequence or str")
+
+    mask = df['source'].isin(source)
+    return df[mask]
 
 
 class WheatDataset(Dataset):
-    def __init__(self, image_dir, csv, transforms=None, show_progress=True):
-        # type: (str, str, Optional[Transforms], Optional[bool]) -> WheatDataset
+    def __init__(self, image_dir, csv, transforms=None, show_progress=True, source=None):
+        # type: (str, str, Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
         super(WheatDataset, self).__init__()
         self.transforms = transforms
 
         df = pd.read_csv(csv)
+        if source is not None:
+            df = filter_by_source(df, source)
+
         ids = df['image_id'].unique()
         files = map(lambda x: x + '.jpg', ids)
         self.images = make_dataset(image_dir, files)

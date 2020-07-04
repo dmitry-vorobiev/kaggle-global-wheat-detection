@@ -11,28 +11,49 @@ distributed:
   url: env://
 
 data:
-  # params is passed to the dataset class __init__
-  params:
-    image_dir: /media/dmitry/data/global-wheat-detection/train
-    csv: /media/dmitry/data/global-wheat-detection/train.csv
-  loader:
-    # batch size per each device
-    batch_size: 8
-    workers: 2
-  transforms:
-    flip:
-      class: albumentations.Flip
-    rotate90:
-      class: albumentations.RandomRotate90
-    resize:
-      class: albumentations.Resize
-      params:
-        height: 640
-        width: 640
-        interpolation: 3  # cv2.INTER_AREA
-    to_torch:
-      class: albumentations.pytorch.transforms.ToTensorV2
-    # FIXME: add normalization
+  train:
+    # params is passed to the dataset class __init__
+    params:
+      image_dir: /media/dmitry/data/global-wheat-detection/train
+      csv: /media/dmitry/data/global-wheat-detection/train.csv
+      # split data by source
+      source: [ethz_1, arvalis_1, rres_1, arvalis_3]
+    loader:
+      # batch size per each device
+      batch_size: 8
+      workers: 2
+    transforms:
+      flip:
+        class: albumentations.Flip
+      rotate90:
+        class: albumentations.RandomRotate90
+      resize:
+        class: albumentations.Resize
+        params:
+          height: 640
+          width: 640
+          interpolation: 3  # cv2.INTER_AREA
+      to_torch:
+        class: albumentations.pytorch.transforms.ToTensorV2
+      # FIXME: add normalization
+  val:
+    params:
+      image_dir: /media/dmitry/data/global-wheat-detection/train
+      csv: /media/dmitry/data/global-wheat-detection/train.csv
+      source: [usask_1, arvalis_2, inrae_1]
+    loader:
+      batch_size: 16
+      workers: 2
+    transforms:
+      resize:
+        class: albumentations.Resize
+        params:
+          height: 640
+          width: 640
+          interpolation: 3  # cv2.INTER_AREA
+      to_torch:
+        class: albumentations.pytorch.transforms.ToTensorV2
+      # FIXME: add normalization
 
 model:
   # FIXME: use .yaml configs instead of wrappers
@@ -57,8 +78,12 @@ optim:
   step_interval: 1
 
 train:
+  skip: false
   epochs: 100
   epoch_length: -1
+
+validate:
+  interval: 1
 
 checkpoints:
   load: ~
