@@ -33,9 +33,13 @@ data:
           height: 640
           width: 640
           interpolation: 3  # cv2.INTER_AREA
+      normalize:
+        class: albumentations.Normalize
+        params:
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
       to_torch:
         class: albumentations.pytorch.transforms.ToTensorV2
-      # FIXME: add normalization
   val:
     params:
       image_dir: /media/dmitry/data/global-wheat-detection/train
@@ -51,9 +55,13 @@ data:
           height: 640
           width: 640
           interpolation: 3  # cv2.INTER_AREA
+      normalize:
+        class: albumentations.Normalize
+        params:
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
       to_torch:
         class: albumentations.pytorch.transforms.ToTensorV2
-      # FIXME: add normalization
 
 model:
   # FIXME: use .yaml configs instead of wrappers

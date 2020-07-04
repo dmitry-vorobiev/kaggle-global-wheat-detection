@@ -1,5 +1,6 @@
-# kaggle-global-wheat-detection
-Code for Global Wheat Detection competition, hosted on Kaggle
+# Global Wheat Detection
+Code for Global Wheat Detection competition, hosted on 
+[kaggle.com](https://www.kaggle.com/c/global-wheat-detection).
 
 ## Configuration
 

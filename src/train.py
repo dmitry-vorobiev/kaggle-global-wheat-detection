@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import torch
+import torchvision
 import torch.distributed as dist
 import torchvision.transforms as T
 
@@ -22,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple, Sized
 from data.dataset import WheatDataset
 from data.utils import basic_collate
 from utils.typings import Batch, Device, FloatDict
+from utils.visualise import visualise_detections
 
 Metrics = Dict[str, Metric]
 
@@ -237,12 +239,19 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
     def _validate(eng: Engine, batch: Batch) -> FloatDict:
         model.eval()
-        batch = _prepare_batch_efficientdet(batch, device, is_val=True)
+        images, targets = _prepare_batch_efficientdet(batch, device, is_val=True)
 
         with torch.no_grad():
-            out: Dict = model(*batch)
+            out: Dict = model(images, targets)
 
-        out.pop("detections")  # what to do with these?
+        predictions = out.pop("detections")
+
+        # for i in range(len(predictions)):
+        #     image = images[i]
+        #     visualise_detections(image, targets['bbox'][i], predictions[i][:, :4])
+        #     path = os.path.join('/media/dmitry/data/kek/', '%03d.png' % i)
+        #     torchvision.utils.save_image(image, path, normalize=True)
+
         stats = {k: v.item() for k, v in out.items()}
         return stats
 
