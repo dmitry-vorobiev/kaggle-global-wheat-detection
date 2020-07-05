@@ -19,6 +19,7 @@ from ignite.utils import convert_tensor
 from omegaconf import DictConfig
 from torch import nn, Tensor
 from torch.utils.data import DataLoader, DistributedSampler
+from tqdm import tqdm
 from typing import Any, Dict, List, Optional, Tuple, Sized
 
 from data.dataset import WheatDataset
@@ -111,9 +112,11 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
     # type: (DictConfig, DictConfig, Optional[bool], Optional[str]) -> WheatDataset
     transforms = [instantiate(v) for k, v in transforms.items()]
     compose = T.Compose
+    compose_kwargs = dict()
     if all(isinstance(t, A.BasicTransform) for t in transforms):
         compose = A.Compose
-    transforms = compose(transforms)
+        compose_kwargs["bbox_params"] = A.BboxParams('pascal_voc')
+    transforms = compose(transforms, **compose_kwargs)
 
     if show_progress:
         print("Loading {} data...".format(name))
@@ -137,7 +140,8 @@ def create_train_loader(conf, rank=None, num_replicas=None):
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
                         collate_fn=basic_collate,
-                        drop_last=True)
+                        drop_last=True,
+                        shuffle=True)
     return loader
 
 
@@ -155,7 +159,8 @@ def create_val_loader(conf, rank=None, num_replicas=None):
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
                         collate_fn=basic_collate,
-                        drop_last=False)
+                        drop_last=False,
+                        shuffle=False)
     return loader
 
 
@@ -180,31 +185,6 @@ def setup_checkpoints(trainer, obj_to_save, epoch_length, conf):
 
 def setup_visualizations(trainer, model, dl, device, conf):
     # type: (Engine, nn.Module, DataLoader, Device, DictConfig) -> None
-
-    def _sample(eng: Engine, batch: Batch) -> None:
-        model.eval()
-        images, targets = _prepare_batch_efficientdet(batch, device, is_val=True)
-
-        with torch.no_grad():
-            out: Dict = model(images, targets)
-
-        predictions = out["detections"]
-        del out
-
-        epoch = trainer.state.epoch
-        it = eng.state.iteration - 1  # need indexing to start from 0
-        done = it * bs
-        to_do = min(conf.num_images - done, len(predictions))
-
-        for i in range(to_do):
-            image = images[i]
-            visualize_detections(image, targets['bbox'][i], predictions[i][:, :4])
-            path = os.path.join(save_dir, '%02d_%03d.png' % (epoch, done + i))
-            torchvision.utils.save_image(image, path, normalize=True)
-
-        if to_do < len(predictions):
-            eng.terminate()
-
     save_dir = conf.get('save_dir', os.path.join(os.getcwd(), 'images'))
 
     if not os.path.exists(save_dir):
@@ -214,19 +194,35 @@ def setup_visualizations(trainer, model, dl, device, conf):
 
     logging.info("Saving visualizations to {}".format(save_dir))
 
-    # Do we actually need an engine here?
-    # It can be a single loop for such a simple case
-    visualizer = Engine(_sample)
-    pbar = ProgressBar(persist=False, desc="Saving visualizations")
-    pbar.attach(visualizer)
-
-    bs = dl.batch_size
-    iterations = int(math.ceil(conf.num_images / bs))
-    iterations = min(iterations, len(dl))
-
     @trainer.on(Events.EPOCH_COMPLETED(every=conf.interval_ep))
     def _make_visualizations(eng: Engine):
-        visualizer.run(dl, epoch_length=iterations)
+        bs = dl.batch_size
+        iterations = int(math.ceil(conf.num_images / bs))
+        iterations = min(iterations, len(dl))
+        epoch = trainer.state.epoch
+
+        data = iter(dl)
+        model.eval()
+
+        for i_batch in tqdm(range(iterations), desc="Saving visualizations"):
+            batch = next(data)
+            images, targets = _prepare_batch_efficientdet(batch, device, is_val=True)
+
+            with torch.no_grad():
+                out: Dict = model(images, targets)
+            predictions = out["detections"]
+
+            done = i_batch * bs
+            to_do = min(conf.num_images - done, len(predictions))
+
+            for i in range(to_do):
+                image = images[i]
+                visualize_detections(image, targets['bbox'][i], predictions[i][:, :4])
+                path = os.path.join(save_dir, '%02d_%03d.png' % (epoch, done + i))
+                torchvision.utils.save_image(image, path, normalize=True)
+                del image
+
+            del images, targets, predictions, out
 
 
 def run(conf: DictConfig, local_rank=0, distributed=False):
