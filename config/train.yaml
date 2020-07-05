@@ -91,18 +91,24 @@ train:
   epoch_length: -1
 
 validate:
-  interval: 1
+  interval_ep: 1
+
+visualise:
+  enabled: true
+  save_dir: ~
+  num_images: 32
+  interval_ep: 1
 
 checkpoints:
   load: ~
   save_dir: ~
-  interval_epoch: 1
-  interval_iteration: 500
+  interval_ep: 1
+  interval_it: 500
   max_checkpoints: 100
 
 logging:
   model: false
-  iter_freq: 100
+  interval_it: 100
   out:
     - loss
     - class_loss

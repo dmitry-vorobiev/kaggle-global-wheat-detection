@@ -36,7 +36,7 @@ def on_epoch_start(engine: Engine):
     engine.state.t0 = time.time()
 
 
-def log_iter(engine, pbar, interval_steps=100, name="stage"):
+def log_iter(engine, pbar, interval_it=100, name="stage"):
     # type: (Engine, ProgressBar, Optional[int], Optional[str]) -> None
     epoch = engine.state.epoch
     iteration = engine.state.iteration
@@ -44,7 +44,7 @@ def log_iter(engine, pbar, interval_steps=100, name="stage"):
     stats = ", ".join(["%s: %.3f" % k_v for k_v in metrics.items()])
     t0 = engine.state.t0
     t1 = time.time()
-    it_time = (t1 - t0) / interval_steps
+    it_time = (t1 - t0) / interval_it
     cur_time = humanize_time(t1)
     pbar.log_message("[{}][{:.3f} s] {} | ep: {:2d}, it: {:3d}, {}".format(
         cur_time, it_time, name, epoch, iteration, stats))
@@ -166,8 +166,8 @@ def setup_checkpoints(trainer, obj_to_save, epoch_length, conf):
     max_cp = max(int(cp.get('max_checkpoints', 1)), 1)
     save = DiskSaver(save_path, create_dir=True, require_empty=True)
     make_checkpoint = Checkpoint(obj_to_save, save, n_saved=max_cp)
-    cp_iter = cp.interval_iteration
-    cp_epoch = cp.interval_epoch
+    cp_iter = cp.interval_it
+    cp_epoch = cp.interval_ep
     if cp_iter > 0:
         save_event = Events.ITERATION_COMPLETED(every=cp_iter)
         trainer.add_event_handler(save_event, make_checkpoint)
@@ -275,13 +275,13 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     pbar = None
 
     if master_node:
-        log_freq = conf.logging.iter_freq
-        log_event = Events.ITERATION_COMPLETED(every=log_freq)
+        log_interval = conf.logging.interval_it
+        log_event = Events.ITERATION_COMPLETED(every=log_interval)
         pbar = ProgressBar(persist=False)
 
         for engine, name in zip([trainer, evaluator], ['train', 'val']):
             engine.add_event_handler(Events.EPOCH_STARTED, on_epoch_start)
-            engine.add_event_handler(log_event, log_iter, pbar, interval_steps=log_freq, name=name)
+            engine.add_event_handler(log_event, log_iter, pbar, interval_it=log_interval, name=name)
             engine.add_event_handler(Events.EPOCH_COMPLETED, log_epoch, name=name)
             pbar.attach(engine, metric_names=metric_names)
 
@@ -294,7 +294,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         Checkpoint.load_objects(to_load=to_save,
                                 checkpoint=torch.load(cp.load, map_location=device))
 
-    @trainer.on(Events.EPOCH_COMPLETED(every=conf.validate.interval))
+    @trainer.on(Events.EPOCH_COMPLETED(every=conf.validate.interval_ep))
     def run_validation(eng: Engine):
         if distributed:
             torch.cuda.synchronize(device)
