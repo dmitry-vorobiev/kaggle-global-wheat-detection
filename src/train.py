@@ -2,6 +2,7 @@ import albumentations as A
 import datetime as dt
 import hydra
 import logging
+import math
 import os
 import time
 import torch
@@ -23,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple, Sized
 from data.dataset import WheatDataset
 from data.utils import basic_collate
 from utils.typings import Batch, Device, FloatDict
-from utils.visualise import visualise_detections
+from utils.visualize import visualize_detections
 
 Metrics = Dict[str, Metric]
 
@@ -177,6 +178,57 @@ def setup_checkpoints(trainer, obj_to_save, epoch_length, conf):
             trainer.add_event_handler(save_event, make_checkpoint)
 
 
+def setup_visualizations(trainer, model, dl, device, conf):
+    # type: (Engine, nn.Module, DataLoader, Device, DictConfig) -> None
+
+    def _sample(eng: Engine, batch: Batch) -> None:
+        model.eval()
+        images, targets = _prepare_batch_efficientdet(batch, device, is_val=True)
+
+        with torch.no_grad():
+            out: Dict = model(images, targets)
+
+        predictions = out["detections"]
+        del out
+
+        epoch = trainer.state.epoch
+        it = eng.state.iteration - 1  # need indexing to start from 0
+        done = it * bs
+        to_do = min(conf.num_images - done, len(predictions))
+
+        for i in range(to_do):
+            image = images[i]
+            visualize_detections(image, targets['bbox'][i], predictions[i][:, :4])
+            path = os.path.join(save_dir, '%02d_%03d.png' % (epoch, done + i))
+            torchvision.utils.save_image(image, path, normalize=True)
+
+        if to_do < len(predictions):
+            eng.terminate()
+
+    save_dir = conf.get('save_dir', os.path.join(os.getcwd(), 'images'))
+
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    elif os.path.isfile(save_dir):
+        raise AttributeError("Unable to save images, not a valid directory: {}")
+
+    logging.info("Saving visualizations to {}".format(save_dir))
+
+    # Do we actually need an engine here?
+    # It can be a single loop for such a simple case
+    visualizer = Engine(_sample)
+    pbar = ProgressBar(persist=False, desc="Saving visualizations")
+    pbar.attach(visualizer)
+
+    bs = dl.batch_size
+    iterations = int(math.ceil(conf.num_images / bs))
+    iterations = min(iterations, len(dl))
+
+    @trainer.on(Events.EPOCH_COMPLETED(every=conf.interval_ep))
+    def _make_visualizations(eng: Engine):
+        visualizer.run(dl, epoch_length=iterations)
+
+
 def run(conf: DictConfig, local_rank=0, distributed=False):
     epochs = conf.train.epochs
     epoch_length = conf.train.epoch_length
@@ -244,14 +296,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         with torch.no_grad():
             out: Dict = model(images, targets)
 
-        predictions = out.pop("detections")
-
-        # for i in range(len(predictions)):
-        #     image = images[i]
-        #     visualise_detections(image, targets['bbox'][i], predictions[i][:, :4])
-        #     path = os.path.join('/media/dmitry/data/kek/', '%03d.png' % i)
-        #     torchvision.utils.save_image(image, path, normalize=True)
-
+        _ = out.pop("detections")
         stats = {k: v.item() for k, v in out.items()}
         return stats
 
@@ -272,7 +317,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
             sampler.set_epoch(eng.state.epoch - 1)
 
     cp = conf.checkpoints
-    pbar = None
+    pbar, pbar_vis = None, None
 
     if master_node:
         log_interval = conf.logging.interval_it
@@ -295,10 +340,13 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
                                 checkpoint=torch.load(cp.load, map_location=device))
 
     @trainer.on(Events.EPOCH_COMPLETED(every=conf.validate.interval_ep))
-    def run_validation(eng: Engine):
+    def _run_validation(eng: Engine):
         if distributed:
             torch.cuda.synchronize(device)
         evaluator.run(valid_dl)
+
+    if master_node and conf.visualize.enabled:
+        setup_visualizations(trainer, model, valid_dl, device, conf.visualize)
 
     try:
         if conf.train.skip:
@@ -309,8 +357,9 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         import traceback
         logging.error(traceback.format_exc())
 
-    if pbar is not None:
-        pbar.close()
+    for pb in [pbar, pbar_vis]:
+        if pb is not None:
+            pbar.close()
 
 
 @hydra.main(config_path="../config/train.yaml")

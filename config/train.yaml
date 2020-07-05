@@ -93,10 +93,10 @@ train:
 validate:
   interval_ep: 1
 
-visualise:
+visualize:
   enabled: true
   save_dir: ~
-  num_images: 32
+  num_images: 36
   interval_ep: 1
 
 checkpoints:

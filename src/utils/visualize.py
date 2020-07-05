@@ -36,7 +36,7 @@ def draw_bbox(image: Tensor, bbox: Tensor, channel=0) -> None:
     image[:, y0:y1 + 1, x1] = c
 
 
-def visualise_detections(image, targets, predictions) -> None:
+def visualize_detections(image, targets, predictions) -> None:
     for box in predictions:
         draw_bbox(image, box, channel=0)
 
