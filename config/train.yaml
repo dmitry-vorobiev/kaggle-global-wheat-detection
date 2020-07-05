@@ -93,11 +93,12 @@ train:
 validate:
   interval_ep: 1
 
+# Renders target and predicted bbox on top of each image in the validation dataset.
 visualize:
   enabled: true
   save_dir: ~
-  num_images: 36
-  interval_ep: 1
+  num_images: 32
+  interval_ep: 10
 
 checkpoints:
   load: ~
