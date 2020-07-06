@@ -2,6 +2,10 @@ hydra:
   run:
     dir: /media/dmitry/data/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
+defaults:
+  - model/effdet/base
+  - model: effdet/d1
+
 general:
   gpu: 1
   seed: 333
@@ -44,7 +48,7 @@ data:
     params:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv
-      source: [usask_1, arvalis_2, inrae_1]
+      source: [ethz_1, usask_1, arvalis_2, inrae_1]
     loader:
       batch_size: 16
       workers: 2
@@ -64,14 +68,13 @@ data:
         class: albumentations.pytorch.transforms.ToTensorV2
 
 model:
-  # FIXME: use .yaml configs instead of wrappers
-  class: model.effdet.create_model
+  class: effdet.create_model_from_config
   params:
-    model_name: tf_efficientdet_d1
-    bench_task: train
+    config:
+      pretrained_backbone: true
+      num_classes: 1
+    bench_name: train
     pretrained: false
-    pretrained_backbone: true,
-    redundant_bias: ~,
     checkpoint_path: ''
 
 # loss inside DetTrainBench
@@ -93,7 +96,7 @@ train:
 validate:
   interval_ep: 1
 
-# Renders target and predicted bbox on top of each image in the validation dataset.
+# Renders target and predicted bboxes on top of each image in the validation dataset.
 visualize:
   enabled: true
   save_dir: ~

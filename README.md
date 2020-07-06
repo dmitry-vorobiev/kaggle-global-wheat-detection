@@ -23,7 +23,7 @@ For more information please visit [Hydra docs](https://hydra.cc/).
 Launch distributed training on GPUs:
 
 ```shell script
-python -m torch.distributed.launch --nproc_per_node=2 --use_env src/train_gan.py
+python -m torch.distributed.launch --nproc_per_node=2 --use_env src/train.py
 ```
 
 It's important to run `torch.distributed.launch` with `--use_env`, 

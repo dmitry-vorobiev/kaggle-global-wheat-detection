@@ -10,6 +10,7 @@ import torchvision
 import torch.distributed as dist
 import torchvision.transforms as T
 
+from effdet import DetBenchTrain
 from hydra.utils import instantiate
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events
@@ -254,8 +255,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     if epoch_length < 1:
         epoch_length = len(train_dl)
 
-    model: nn.Module = instantiate(conf.model).to(device)
-    optim: torch.optim.SGD = instantiate(conf.optim, model.parameters())
+    model = instantiate(conf.model).to(device)
+    optim = instantiate(conf.optim, model.parameters())
 
     to_save = dict(model=model, optim=optim)
 

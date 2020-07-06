@@ -1,0 +1,14 @@
+model:
+  params:
+    config:
+      name: efficientdet_d0
+      backbone_name: efficientnet_b0
+      backbone_args:
+        drop_path_rate: 0.1
+      image_size: 512
+      fpn_channels: 64
+      fpn_cell_repeats: 3
+      box_class_repeats: 3
+      pad_type: ''
+      redundant_bias: false
+      url: https://github.com/rwightman/efficientdet-pytorch/releases/download/v0.1/efficientdet_d0-f3276ba8.pth

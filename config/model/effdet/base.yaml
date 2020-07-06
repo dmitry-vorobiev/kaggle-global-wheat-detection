@@ -1,0 +1,39 @@
+model:
+  class: effdet.create_model_from_config
+  params:
+    config:
+      # feature + anchor config
+      min_level: 3
+      max_level: 7
+      num_levels: 5  # max_level - min_level + 1
+      num_scales: 3
+      aspect_ratios:
+        - [1.0, 1.0]
+        - [1.4, 0.7]
+        - [0.7, 1.4]
+      anchor_scale: 4.0
+
+      # FPN and head config
+      # pad_type: same
+      act_type: swish
+      # box_class_repeats: 3
+      # fpn_cell_repeats: 3
+      # fpn_channels: 88
+      separable_conv: true
+      apply_bn_for_resampling: true
+      conv_after_downsample: false
+      conv_bn_relu_pattern: false
+      use_native_resize_op: false
+      pooling_type: null
+      # redundant_bias: true
+      fpn_name: null
+      fpn_config: null
+      fpn_drop_path_rate: 0.0  # No stochastic depth in default.
+
+      # classification loss (used by train bench)
+      alpha: 0.25
+      gamma: 1.5
+
+      # localization loss (used by train bench)
+      delta: 0.1
+      box_loss_weight: 50.0
