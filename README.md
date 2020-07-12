@@ -2,6 +2,9 @@
 Code for Global Wheat Detection competition, hosted on 
 [kaggle.com](https://www.kaggle.com/c/global-wheat-detection).
 
+## Notes
+[Generate data with style augmentation](./info/DATA.md)
+
 ## Configuration
 
 Train script uses [Hydra framework](https://github.com/facebookresearch/hydra) 
