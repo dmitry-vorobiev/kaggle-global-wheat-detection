@@ -9,11 +9,11 @@ class Inception3_Encoder(nn.Module):
 
     Changes:
      - Most layers past Mixed_6e were removed along with auxiliary output.
-     - The number of input features in the final fully-connected layers was reduced
+     - The number of input features in the final fully-connected layer was reduced
        to match the output of Mixed_6e layer.
-     - Removed warning about feature behavior of `init_weights`
+     - Removed warning about future behavior of `init_weights`
      - Replaced `num_classes` arg with `out_features`,
-     - Removed `aux_logits`
+     - Removed `aux_logits` arg
 
     Original:
     https://github.com/pytorch/vision/blob/cf534fdaee048a7edce90a5577508985c58c3602/torchvision/models/inception.py
