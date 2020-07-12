@@ -1,8 +1,11 @@
 import torch
+import torch.nn.functional as F
 
 from collections import OrderedDict
 from torch import nn, Tensor
 from typing import Optional
+
+from .inception import Inception3_Encoder
 
 
 class EncoderLayer(nn.Sequential):
@@ -94,3 +97,43 @@ class TransformNet(nn.Module):
             x = layer(x, style)
 
         return torch.sigmoid_(x)
+
+
+class StyleAugmentNet(nn.Module):
+    def __init__(self, img_channels=3, style_dim=100):
+        super(StyleAugmentNet, self).__init__()
+        self.style_dim = style_dim
+        self.style_encoder = Inception3_Encoder(out_features=style_dim, transform_input=True)
+        self.transform = TransformNet(img_channels)
+
+        self.register_buffer('style_mean', torch.zeros(style_dim))
+        self.register_buffer('style_cov', torch.ones(style_dim, style_dim))
+        self.register_buffer('style_std', torch.empty(style_dim, style_dim))
+        self.compute_style_std()
+
+    def compute_style_std(self):
+        u, s, v = torch.svd(self.style_cov)
+        s = torch.sqrt(s)
+        self.style_std = (u @ s.diag()).T
+
+    def sample_style(self, batch_size, device=None):
+        s = torch.randn(batch_size, self.style_dim, device=device)
+        s = torch.mm(s, self.style_std).add_(self.style_mean)
+        return s
+
+    def forward(self, x, style=None, alpha=0.5):
+        if style is None:
+            style = self.sample_style(x.size(0), device=x.device)
+
+        if alpha < 1:
+            x1 = F.interpolate(x, size=299, mode='bicubic', align_corners=False)
+            orig_style = self.style_encoder(x1)
+            style.lerp_(orig_style, 1 - alpha)
+            del x1
+
+        x = self.transform(x, style)
+        return x
+
+    def load_state_dict(self, state_dict, strict=True):
+        super(StyleAugmentNet, self).load_state_dict(state_dict, strict=strict)
+        self.compute_style_std()
