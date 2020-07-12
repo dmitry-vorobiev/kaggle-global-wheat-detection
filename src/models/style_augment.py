@@ -3,7 +3,7 @@ import torch.nn.functional as F
 
 from collections import OrderedDict
 from torch import nn, Tensor
-from typing import Optional
+from typing import Optional, Union
 
 from .inception import Inception3_Encoder
 
@@ -101,6 +101,7 @@ class TransformNet(nn.Module):
 
 class StyleAugmentNet(nn.Module):
     def __init__(self, img_channels=3, style_dim=100):
+        # type: (Optional[int], Optional[int]) -> None
         super(StyleAugmentNet, self).__init__()
         self.style_dim = style_dim
         self.style_encoder = Inception3_Encoder(out_features=style_dim, transform_input=True)
@@ -116,20 +117,33 @@ class StyleAugmentNet(nn.Module):
         s = torch.sqrt(s)
         self.style_std = (u @ s.diag()).T
 
-    def sample_style(self, batch_size, device=None):
+    def sample_style(self, batch_size: int, device=None):
         s = torch.randn(batch_size, self.style_dim, device=device)
         s = torch.mm(s, self.style_std).add_(self.style_mean)
         return s
 
+    @staticmethod
+    def need_orig_style(alpha: Union[float, Tensor]) -> bool:
+        if isinstance(alpha, float):
+            return alpha < 1
+        return bool((alpha < 1).any())
+
     def forward(self, x, style=None, alpha=0.5):
+        # type: (Tensor, Optional[Tensor], Optional[Union[float, Tensor]]) -> Tensor
         if style is None:
             style = self.sample_style(x.size(0), device=x.device)
 
-        if alpha < 1:
+        if self.need_orig_style(alpha):
             x1 = F.interpolate(x, size=299, mode='bicubic', align_corners=False)
             orig_style = self.style_encoder(x1)
+
+            if isinstance(alpha, Tensor):
+                alpha = alpha.to(x.device)
+                if alpha.ndim == 1:
+                    alpha = alpha[:, None]
+
             style.lerp_(orig_style, 1 - alpha)
-            del x1
+            del x1, orig_style
 
         x = self.transform(x, style)
         return x
