@@ -125,9 +125,9 @@ class StyleAugmentNet(nn.Module):
 
     @staticmethod
     def need_orig_style(alpha: Union[float, FloatInterval]) -> bool:
-        if isinstance(alpha, float):
-            return alpha < 1
-        return alpha[0] < 1
+        if isinstance(alpha, tuple):
+            alpha = alpha[0]
+        return alpha < 1
 
     def forward(self, x, style=None, alpha=(0.2, 0.5)):
         # type: (Tensor, Optional[Tensor], Optional[Union[float, FloatInterval]]) -> Tensor
@@ -142,8 +142,6 @@ class StyleAugmentNet(nn.Module):
             orig_style = self.style_encoder(x1)
 
             if isinstance(alpha, tuple):
-                if len(alpha) != 2:
-                    raise AttributeError("alpha must have two entries: (min, max)")
                 alpha = interval_to_tensor(N, alpha, device=device)
 
             style.lerp_(orig_style, 1 - alpha)
