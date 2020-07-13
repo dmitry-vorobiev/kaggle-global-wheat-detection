@@ -48,7 +48,7 @@ data:
     params:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv
-      source: [ethz_1, usask_1, arvalis_2, inrae_1]
+      source: [usask_1, arvalis_2, inrae_1]
     loader:
       batch_size: 16
       workers: 2

@@ -10,7 +10,6 @@ import torchvision
 import torch.distributed as dist
 import torchvision.transforms as T
 
-from effdet import DetBenchTrain
 from hydra.utils import instantiate
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events

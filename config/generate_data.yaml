@@ -1,0 +1,38 @@
+hydra:
+  run:
+    dir: /media/dmitry/data/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+gpu: 1
+seed: 333
+
+out:
+  num_images: 32
+  dir: /media/dmitry/data/kek/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  ext: jpg
+
+data:
+  # params is passed to the dataset class __init__
+  params:
+    image_dir: /media/dmitry/data/global-wheat-detection/train
+    csv: /media/dmitry/data/global-wheat-detection/train.csv
+    source: ~
+  loader:
+    # batch size per each device
+    batch_size: 8
+    workers: 2
+  transforms:
+    normalize:
+      class: albumentations.Normalize
+      params:
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
+    to_torch:
+      class: albumentations.pytorch.transforms.ToTensorV2
+
+model:
+  class: models.style_augment.StyleAugmentNet
+  params:
+    img_channels: 3
+    style_dim: 100
+  alpha: 0.33
+  weights: /home/dmitry/projects/wheat-detection/nbs/weights.pth
