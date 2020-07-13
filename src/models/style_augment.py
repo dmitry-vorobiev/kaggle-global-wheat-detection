@@ -3,9 +3,10 @@ import torch.nn.functional as F
 
 from collections import OrderedDict
 from torch import nn, Tensor
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 from .inception import Inception3_Encoder
+from ._utils import FloatInterval, interval_to_tensor
 
 
 class EncoderLayer(nn.Sequential):
@@ -123,24 +124,27 @@ class StyleAugmentNet(nn.Module):
         return s
 
     @staticmethod
-    def need_orig_style(alpha: Union[float, Tensor]) -> bool:
+    def need_orig_style(alpha: Union[float, FloatInterval]) -> bool:
         if isinstance(alpha, float):
             return alpha < 1
-        return bool((alpha < 1).any())
+        return alpha[0] < 1
 
-    def forward(self, x, style=None, alpha=0.5):
-        # type: (Tensor, Optional[Tensor], Optional[Union[float, Tensor]]) -> Tensor
+    def forward(self, x, style=None, alpha=(0.2, 0.5)):
+        # type: (Tensor, Optional[Tensor], Optional[Union[float, FloatInterval]]) -> Tensor
+        N = x.size(0)
+        device = x.device
+
         if style is None:
-            style = self.sample_style(x.size(0), device=x.device)
+            style = self.sample_style(N, device=device)
 
         if self.need_orig_style(alpha):
             x1 = F.interpolate(x, size=299, mode='bicubic', align_corners=False)
             orig_style = self.style_encoder(x1)
 
-            if isinstance(alpha, Tensor):
-                alpha = alpha.to(x.device)
-                if alpha.ndim == 1:
-                    alpha = alpha[:, None]
+            if isinstance(alpha, tuple):
+                if len(alpha) != 2:
+                    raise AttributeError("alpha must have two entries: (min, max)")
+                alpha = interval_to_tensor(N, alpha, device=device)
 
             style.lerp_(orig_style, 1 - alpha)
             del x1, orig_style
