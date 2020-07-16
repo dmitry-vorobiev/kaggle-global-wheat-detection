@@ -8,6 +8,12 @@ Weights were ported from the [official repo](https://github.com/philipjackson/st
 
 ## How to use
 
+1. Download model weights first
+2. Generate new images with *style augment*.
+3. Use `ExtendedWheatDataset` to load both original and synthetic data
+
+### From code
+
 ```python
 import torch
 from models.style_augment import StyleAugmentNet
@@ -17,9 +23,22 @@ weights = torch.load('weights.pth')
 style_aug.load_state_dict(weights)
 style_aug.requires_grad_(False)
 
-# you may also use float value here
-alpha = torch.rand(8) * 0.33 + 0.33  # 0.33 ... 0.66
-styled_images = style_aug(images, alpha=alpha)
+styled_images = style_aug(images, alpha=(0.1, 0.33))
 ```
 
 See [this notebook](../nbs/style-aug.ipynb) with complete example on how to use style augmentation.
+
+### Run script
+
+It will produce `out.num_images` new images and save them in `out.dir`. 
+Each generated images should have filename such as `0c3d9007c_1.jpg`, 
+where part before `_` is the original filename.
+
+```shell script
+python src/generate_data.py model.alpha=(0.1, 0.33) \
+ model.weights=/path/to/weights \
+ out.dir=/path/to/save/dir \
+ out.num_images=3000
+```
+
+See other available options in [generate_data.yaml](../config/generate_data.yaml)

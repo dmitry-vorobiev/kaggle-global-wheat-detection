@@ -15,7 +15,7 @@ data:
   params:
     image_dir: /media/dmitry/data/global-wheat-detection/train
     csv: /media/dmitry/data/global-wheat-detection/train.csv
-    source: [usask_1]
+    source: ~
   loader:
     # batch size per each device
     batch_size: 8
