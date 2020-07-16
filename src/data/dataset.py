@@ -122,3 +122,77 @@ class WheatDataset(Dataset):
 
     def __len__(self):
         return len(self.images)
+
+
+class ExtendedWheatDataset(Dataset):
+    def __init__(self, image_dirs, csv, transforms=None, show_progress=True, source=None):
+        # type: (Union[str, Iterable[str]], str, Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
+        super(ExtendedWheatDataset, self).__init__()
+        self.transforms = transforms
+
+        df = pd.read_csv(csv)
+        if source is not None:
+            df = filter_by_source(df, source)
+
+        ids = df['image_id'].unique()
+        unique_ids = set(ids)
+        files, images, bboxes = [], [], []
+        total = 0
+
+        for img_dir in image_dirs:
+            ff = os.listdir(img_dir)
+            files.append(ff)
+            total += len(ff)
+
+        pbar = None
+        if show_progress:
+            pbar = tqdm(desc="Parsing bboxes...", total=total)
+
+        for image_dir, dir_files in zip(image_dirs, files):
+            for file in dir_files:
+                image_id, ext = os.path.splitext(file)
+                # Remove indexes from synthetic images if there are any
+                image_id = image_id.split('_')[0]
+                if image_id in unique_ids:
+                    path = os.path.join(image_dir, file)
+                    image_bb = df.loc[df['image_id'] == image_id, 'bbox']
+                    image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
+                    images.append(path)
+                    bboxes.append(image_bb)
+                    if pbar is not None:
+                        pbar.update(1)
+
+        pbar.close()
+        assert len(bboxes) == len(images)
+
+        self.images = images
+        self.bboxes = bboxes
+
+    def __getitem__(self, index):
+        path = self.images[index]
+
+        if not os.path.exists(path):
+            log.warning("Unable to read from {}".format(path))
+            index = np.random.randint(len(self))
+            # Bad luck :) Lets make another dice roll...
+            return self[index]
+
+        image = cv2_imread(path)
+        bboxes = self.bboxes[index]
+
+        if self.transforms is not None:
+            out = self.transforms(image=image, bboxes=bboxes)
+            image, bboxes = out['image'], out['bboxes']
+            bboxes = np.stack(bboxes)
+        else:
+            image = torch.from_numpy(image)
+            bboxes = torch.from_numpy(bboxes)
+
+        # Remove class label and downcast from float64 to int16
+        # to send less data to GPU. Some boxes have fractional part of .5,
+        # but for high res images this shouldn't be an issue
+        bboxes = bboxes[:, :4].astype(np.int16)
+        return image, bboxes
+
+    def __len__(self):
+        return len(self.images)
