@@ -6,7 +6,7 @@ gpu: 1
 seed: 333
 
 out:
-  num_images: 32
+  num_images: 500
   dir: /media/dmitry/data/kek/${now:%Y-%m-%d}/${now:%H-%M-%S}
   ext: jpg
 
@@ -15,7 +15,7 @@ data:
   params:
     image_dir: /media/dmitry/data/global-wheat-detection/train
     csv: /media/dmitry/data/global-wheat-detection/train.csv
-    source: ~
+    source: [usask_1]
   loader:
     # batch size per each device
     batch_size: 8
@@ -34,5 +34,5 @@ model:
   params:
     img_channels: 3
     style_dim: 100
-  alpha: 0.33
+  alpha: [0.1, 0.33]
   weights: /home/dmitry/projects/wheat-detection/nbs/weights.pth

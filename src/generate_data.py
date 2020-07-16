@@ -6,7 +6,7 @@ import torch
 import torchvision.transforms as T
 
 from hydra.utils import instantiate
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 from tqdm import tqdm
@@ -47,7 +47,11 @@ def main(conf: DictConfig):
     torch.cuda.set_device(conf.gpu)
     device = torch.device('cuda')
     num_images = conf.out.num_images
+
     alpha = conf.model.alpha
+    if isinstance(alpha, ListConfig):
+        assert len(alpha) == 2
+        alpha = tuple(alpha)
 
     out_dir = conf.out.get('dir', os.path.join(os.getcwd(), 'generated_images'))
     extension = conf.out.ext
@@ -64,25 +68,27 @@ def main(conf: DictConfig):
     model.requires_grad_(False)
 
     pbar = tqdm(desc="Generating images", total=num_images, unit=' img')
-    i = 0
+    i_img = 0
+    i_data = 0
     data = iter(dl)
 
-    while i < num_images:
+    while i_img < num_images:
         try:
             images, names = next(data)
         except StopIteration:
             data = iter(dl)
             images, names = next(data)
+            i_data += 1
 
         images = images.to(device)
         images = model(images, alpha=alpha)
 
         for image, name in zip(images, names):
-            file = '{}_{}.{}'.format(name, i, extension)
+            file = '{}_{}.{}'.format(name, i_data, extension)
             path = os.path.join(out_dir, file)
             save_image(image, path, nrow=1, normalize=True)
             pbar.update(1)
-            i += 1
+            i_img += 1
 
     pbar.close()
     print("DONE")
