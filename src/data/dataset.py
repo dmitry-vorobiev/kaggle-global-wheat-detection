@@ -125,60 +125,53 @@ class WheatDataset(Dataset):
 
 
 class ExtendedWheatDataset(Dataset):
-    def __init__(self, image_dirs, csv, transforms=None, show_progress=True, source=None):
-        # type: (Union[str, Iterable[str]], str, Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
+    def __init__(self, image_dir, csv, gen_image_dirs=None, transforms=None, show_progress=True,
+                 source=None):
+        # type: (str, str, Optional[Iterable[str]], Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
         super(ExtendedWheatDataset, self).__init__()
         self.transforms = transforms
 
         df = pd.read_csv(csv)
+        ids = df['image_id'].unique()
+
+        if show_progress:
+            ids = tqdm(ids, desc="Parsing all bboxes...")
+
+        id_to_ordinal = dict()
+        bboxes = []
+        for i, image_id in enumerate(ids):
+            image_bb = df.loc[df['image_id'] == image_id, 'bbox']
+            image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
+            id_to_ordinal[image_id] = i
+            bboxes.append(image_bb)
+
+        assert len(bboxes) == len(id_to_ordinal)
+        self.bboxes = bboxes
+        self.id_to_ordinal = id_to_ordinal
+
         if source is not None:
             df = filter_by_source(df, source)
+            ids = df['image_id'].unique()
 
-        ids = df['image_id'].unique()
-        unique_ids = set(ids)
-        files, images, bboxes = [], [], []
-        total = 0
+        files = map(lambda x: x + '.jpg', ids)
+        self.images = make_dataset(image_dir, files)
+        self.num_orig_images = len(self.images)
 
-        for img_dir in image_dirs:
-            ff = os.listdir(img_dir)
-            files.append(ff)
-            total += len(ff)
-
-        pbar = None
-        if show_progress:
-            pbar = tqdm(desc="Parsing bboxes...", total=total)
-
-        for image_dir, dir_files in zip(image_dirs, files):
-            for file in dir_files:
-                image_id, ext = os.path.splitext(file)
-                # Remove indexes from synthetic images if there are any
-                image_id = image_id.split('_')[0]
-                if image_id in unique_ids:
-                    path = os.path.join(image_dir, file)
-                    image_bb = df.loc[df['image_id'] == image_id, 'bbox']
-                    image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
-                    images.append(path)
-                    bboxes.append(image_bb)
-                    if pbar is not None:
-                        pbar.update(1)
-
-        pbar.close()
-        assert len(bboxes) == len(images)
-
-        self.images = images
-        self.bboxes = bboxes
+        if gen_image_dirs is not None:
+            for img_dir in gen_image_dirs:
+                self.images += [os.path.join(img_dir, f) for f in os.listdir(img_dir)]
 
     def __getitem__(self, index):
         path = self.images[index]
+        bboxes = self._find_bboxes(path)
 
         if not os.path.exists(path):
-            log.warning("Unable to read from {}".format(path))
+            print("Unable to read from {}".format(path))
             index = np.random.randint(len(self))
             # Bad luck :) Lets make another dice roll...
             return self[index]
 
         image = cv2_imread(path)
-        bboxes = self.bboxes[index]
 
         if self.transforms is not None:
             out = self.transforms(image=image, bboxes=bboxes)
@@ -193,6 +186,14 @@ class ExtendedWheatDataset(Dataset):
         # but for high res images this shouldn't be an issue
         bboxes = bboxes[:, :4].astype(np.int16)
         return image, bboxes
+
+    def _find_bboxes(self, path: str) -> np.ndarray:
+        file = os.path.split(path)[-1]
+        image_id, ext = os.path.splitext(file)
+        # Gets original image_id. Removes indexes from synthetic images if there are any
+        image_id = image_id.split('_')[0]
+        index = self.id_to_ordinal[image_id]
+        return self.bboxes[index]
 
     def __len__(self):
         return len(self.images)

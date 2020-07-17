@@ -31,8 +31,8 @@ See [this notebook](../nbs/style-aug.ipynb) with complete example on how to use 
 ### Run script
 
 It will produce `out.num_images` new images and save them in `out.dir`. 
-Each generated images should have filename such as `0c3d9007c_1.jpg`, 
-where part before `_` is the original filename.
+Each generated image should have filename such as `0c3d9007c_1.jpg`, 
+where the part before `_` is the original filename.
 
 ```shell script
 python src/generate_data.py model.alpha=(0.1, 0.33) \
