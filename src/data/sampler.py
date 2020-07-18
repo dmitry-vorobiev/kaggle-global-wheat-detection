@@ -72,7 +72,13 @@ class CustomSampler(Sampler):
             ii = torch.randperm(len(indices), generator=g)
             indices = indices[ii].tolist()
         else:
-            indices = list(range(take_orig)) + list(range(num_orig, num_orig + take_gen))
+            def _rnd_indices(start, end, total):
+                repeats = math.ceil(total / (end - start))
+                idxs = idxs = [i for _ in range(repeats) for i in range(start, end)]
+                return idxs[:total]
+
+            indices = _rnd_indices(0, num_orig, take_orig)
+            indices += _rnd_indices(num_orig, len(self.dataset), take_gen)
 
         # add extra samples to make it evenly divisible
         indices += indices[:(self.total_size - len(indices))]
