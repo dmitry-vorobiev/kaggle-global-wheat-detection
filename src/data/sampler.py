@@ -74,7 +74,7 @@ class CustomSampler(Sampler):
         else:
             def _rnd_indices(start, end, total):
                 repeats = math.ceil(total / (end - start))
-                idxs = idxs = [i for _ in range(repeats) for i in range(start, end)]
+                idxs = [i for _ in range(repeats) for i in range(start, end)]
                 return idxs[:total]
 
             indices = _rnd_indices(0, num_orig, take_orig)
