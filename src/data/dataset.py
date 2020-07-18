@@ -9,7 +9,7 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import Dataset
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 
 log = logging.getLogger(__name__)
@@ -68,6 +68,23 @@ def filter_by_source(df: pd.DataFrame, source: DataSource) -> pd.DataFrame:
     return df[mask]
 
 
+def parse_bboxes(df, ids, show_progress=True):
+    # type: (pd.DataFrame, Iterable[str], Optional[bool]) -> Tuple[List[np.ndarray], Dict[str, int]]
+    if show_progress:
+        ids = tqdm(ids, desc="Parsing bboxes...")
+
+    id_to_ordinal = dict()
+    bboxes = []
+    for i, image_id in enumerate(ids):
+        image_bb = df.loc[df['image_id'] == image_id, 'bbox']
+        image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
+        id_to_ordinal[image_id] = i
+        bboxes.append(image_bb)
+
+    assert len(bboxes) == len(id_to_ordinal)
+    return bboxes, id_to_ordinal
+
+
 class WheatDataset(Dataset):
     def __init__(self, image_dir, csv, transforms=None, show_progress=True, source=None):
         # type: (str, str, Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
@@ -81,18 +98,8 @@ class WheatDataset(Dataset):
         ids = df['image_id'].unique()
         files = map(lambda x: x + '.jpg', ids)
         self.images = make_dataset(image_dir, files)
-
-        if show_progress:
-            ids = tqdm(ids, desc="Parsing bboxes...")
-
-        bboxes = []
-        for image_id in ids:
-            image_bb = df.loc[df['image_id'] == image_id, 'bbox']
-            image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
-            bboxes.append(image_bb)
-
-        assert len(bboxes) == len(self.images)
-        self.bboxes = bboxes
+        self.bboxes = parse_bboxes(df, ids, show_progress=show_progress)[0]
+        assert len(self.bboxes) == len(self.images)
 
     def __getitem__(self, index):
         path = self.images[index]
@@ -133,19 +140,7 @@ class ExtendedWheatDataset(Dataset):
 
         df = pd.read_csv(csv)
         ids = df['image_id'].unique()
-
-        if show_progress:
-            ids = tqdm(ids, desc="Parsing all bboxes...")
-
-        id_to_ordinal = dict()
-        bboxes = []
-        for i, image_id in enumerate(ids):
-            image_bb = df.loc[df['image_id'] == image_id, 'bbox']
-            image_bb = np.stack(list(map(bbox_str_to_numpy, image_bb)))
-            id_to_ordinal[image_id] = i
-            bboxes.append(image_bb)
-
-        assert len(bboxes) == len(id_to_ordinal)
+        bboxes, id_to_ordinal = parse_bboxes(df, ids, show_progress=show_progress)
         self.bboxes = bboxes
         self.id_to_ordinal = id_to_ordinal
 
@@ -158,8 +153,15 @@ class ExtendedWheatDataset(Dataset):
         self.num_orig_images = len(self.images)
 
         if gen_image_dirs is not None:
+            ids = set(ids.tolist())
             for img_dir in gen_image_dirs:
-                self.images += [os.path.join(img_dir, f) for f in os.listdir(img_dir)]
+                for file in os.listdir(img_dir):
+                    image_id = self._parse_image_id(file)
+                    # filter synthetic images the same way as the original ones
+                    # to avoid leakage on validation
+                    if image_id in ids:
+                        path = os.path.join(img_dir, file)
+                        self.images.append(path)
 
     def __getitem__(self, index):
         path = self.images[index]
@@ -187,11 +189,16 @@ class ExtendedWheatDataset(Dataset):
         bboxes = bboxes[:, :4].astype(np.int16)
         return image, bboxes
 
+    @staticmethod
+    def _parse_image_id(filename: str) -> str:
+        image_id, ext = os.path.splitext(filename)
+        # Gets original image_id. Removes indexes from synthetic images if there are any
+        image_id = str(image_id).split('_')[0]
+        return image_id
+
     def _find_bboxes(self, path: str) -> np.ndarray:
         file = os.path.split(path)[-1]
-        image_id, ext = os.path.splitext(file)
-        # Gets original image_id. Removes indexes from synthetic images if there are any
-        image_id = image_id.split('_')[0]
+        image_id = self._parse_image_id(file)
         index = self.id_to_ordinal[image_id]
         return self.bboxes[index]
 
