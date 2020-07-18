@@ -1,18 +1,19 @@
 # Style augmentation
 
+1. Download model weights first
+2. Generate new images with *style augment*. 
+Use either runtime augmentation or generate more images upfront.
+3. (Optional) Use `ExtendedWheatDataset` with `CustomSampler` to load both original and synthetic data
+
 ## Pretrained weights
 
 Weights were ported from the [official repo](https://github.com/philipjackson/style-augmentation) using [this notebook](../nbs/style-aug-impl.ipynb):
 
 [Google drive](https://drive.google.com/file/d/1t_OZZfkfCf8Z26F-jea1tcw9u6SmtWxY/view?usp=sharing)
 
-## How to use
+## Apply styles
 
-1. Download model weights first
-2. Generate new images with *style augment*.
-3. Use `ExtendedWheatDataset` to load both original and synthetic data
-
-### From code
+### In your code
 
 ```python
 import torch
@@ -42,3 +43,39 @@ python src/generate_data.py model.alpha=(0.1, 0.33) \
 ```
 
 See other available options in [generate_data.yaml](../config/generate_data.yaml)
+
+## Load generated images
+
+```python
+import albumentations as A
+import cv2
+import torch
+
+from pathlib import Path
+
+from data.dataset import ExtendedWheatDataset
+from data.sampler import CustomSampler
+from data.utils import basic_collate
+
+DATA_DIR = Path('/path/to/data')
+image_dir = DATA_DIR/'train'
+csv_path = DATA_DIR/'train.csv'
+gen_image_dirs = ['/path/to/gen/images']
+
+tfms = [
+    A.Flip(),
+    A.RandomRotate90(),
+    A.Resize(512, 512, interpolation=cv2.INTER_AREA),
+    A.Normalize(),
+    A.pytorch.transforms.ToTensorV2()
+]
+tfms = A.Compose(tfms, bbox_params=A.BboxParams('pascal_voc'))
+
+ds = ExtendedWheatDataset(image_dir, csv_path, 
+                          gen_image_dirs=gen_image_dirs, 
+                          transforms=tfms, 
+                          source=['usask_1'])
+
+sampler = CustomSampler(ds, orig_images_ratio=0.5)
+dl = torch.utils.data.DataLoader(ds, sampler=sampler, batch_size=8, collate_fn=basic_collate)
+```

@@ -166,7 +166,7 @@ class ExtendedWheatDataset(Dataset):
         bboxes = self._find_bboxes(path)
 
         if not os.path.exists(path):
-            print("Unable to read from {}".format(path))
+            log.warning("Unable to read from {}".format(path))
             index = np.random.randint(len(self))
             # Bad luck :) Lets make another dice roll...
             return self[index]
