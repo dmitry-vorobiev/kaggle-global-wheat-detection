@@ -6,8 +6,8 @@ gpu: 1
 seed: 333
 
 out:
-  num_images: 500
-  dir: /media/dmitry/data/kek/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  num_images: 30_000
+  dir: /media/dmitry/data/global-wheat-detection/synthetic/${now:%Y-%m-%d}/${now:%H-%M-%S}
   ext: jpg
 
 data:
@@ -18,7 +18,7 @@ data:
     source: ~
   loader:
     # batch size per each device
-    batch_size: 8
+    batch_size: 10
     workers: 2
   transforms:
     normalize:
@@ -35,4 +35,4 @@ model:
     img_channels: 3
     style_dim: 100
   alpha: [0.1, 0.33]
-  weights: /home/dmitry/projects/wheat-detection/nbs/weights.pth
+  weights: /media/dmitry/data/weights/style_augment_PBN_100.pth

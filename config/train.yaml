@@ -16,12 +16,14 @@ distributed:
 
 data:
   train:
-    # params is passed to the dataset class __init__
+    class: data.dataset.ExtendedWheatDataset
     params:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv
-      # split data by source
+      gen_image_dirs:
+        - /media/dmitry/data/global-wheat-detection/synthetic/2020-07-19/15-13-08
       source: [ethz_1, arvalis_1, rres_1, arvalis_3]
+    orig_images_ratio: 0.5
     loader:
       # batch size per each device
       batch_size: 8
@@ -45,6 +47,7 @@ data:
       to_torch:
         class: albumentations.pytorch.transforms.ToTensorV2
   val:
+    class: data.dataset.WheatDataset
     params:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv

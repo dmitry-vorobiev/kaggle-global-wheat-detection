@@ -17,12 +17,13 @@ from ignite.handlers import Checkpoint, DiskSaver, TerminateOnNan
 from ignite.metrics import Metric, RunningAverage
 from ignite.utils import convert_tensor
 from omegaconf import DictConfig
-from torch import nn, Tensor
-from torch.utils.data import DataLoader, DistributedSampler
+from torch import nn
+from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from tqdm import tqdm
-from typing import Any, Dict, List, Optional, Tuple, Sized
+from typing import Any, Dict, List, Optional
 
-from data.dataset import WheatDataset
+from data.dataset import ExtendedWheatDataset
+from data.sampler import CustomSampler
 from data.utils import basic_collate
 from utils.typings import Batch, Device, FloatDict
 from utils.visualize import visualize_detections
@@ -109,7 +110,7 @@ def _upd_pbar_iter_from_cp(engine: Engine, pbar: ProgressBar) -> None:
 
 
 def create_dataset(conf, transforms, show_progress=False, name="train"):
-    # type: (DictConfig, DictConfig, Optional[bool], Optional[str]) -> WheatDataset
+    # type: (DictConfig, DictConfig, Optional[bool], Optional[str]) -> Dataset
     transforms = [instantiate(v) for k, v in transforms.items()]
     compose = T.Compose
     compose_kwargs = dict()
@@ -120,7 +121,7 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
 
     if show_progress:
         print("Loading {} data...".format(name))
-    ds = WheatDataset(**conf.params, transforms=transforms, show_progress=show_progress)
+    ds = instantiate(conf, transforms=transforms, show_progress=show_progress)
     if show_progress:
         print("{}: {} images".format(name, len(ds)))
     return ds
@@ -132,7 +133,12 @@ def create_train_loader(conf, rank=None, num_replicas=None):
     data = create_dataset(conf, conf.transforms, show_progress=show_progress, name="train")
 
     sampler = None
-    if num_replicas is not None:
+    if isinstance(data, ExtendedWheatDataset):
+        sampler = CustomSampler(data,
+                                orig_images_ratio=conf.get("orig_images_ratio", 0.5),
+                                num_replicas=num_replicas,
+                                rank=rank)
+    elif num_replicas is not None:
         sampler = DistributedSampler(data, num_replicas=num_replicas, rank=rank)
 
     loader = DataLoader(data,
@@ -141,7 +147,7 @@ def create_train_loader(conf, rank=None, num_replicas=None):
                         num_workers=conf.get('loader.workers', 0),
                         collate_fn=basic_collate,
                         drop_last=True,
-                        shuffle=True)
+                        shuffle=not sampler)
     return loader
 
 
@@ -160,7 +166,7 @@ def create_val_loader(conf, rank=None, num_replicas=None):
                         num_workers=conf.get('loader.workers', 0),
                         collate_fn=basic_collate,
                         drop_last=False,
-                        shuffle=False)
+                        shuffle=not sampler)
     return loader
 
 
