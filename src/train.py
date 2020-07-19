@@ -121,7 +121,10 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
 
     if show_progress:
         print("Loading {} data...".format(name))
-    ds = instantiate(conf, transforms=transforms, show_progress=show_progress)
+    ds = instantiate(conf, show_progress=show_progress)
+    # hydra will raise "ValueError: key transforms: Compose is not a primitive type",
+    # if you try to pass transforms directly to instantiate(...)
+    ds.transforms = transforms
     if show_progress:
         print("{}: {} images".format(name, len(ds)))
     return ds

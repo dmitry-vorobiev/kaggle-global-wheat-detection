@@ -94,8 +94,8 @@ class WheatDataset(Dataset):
         df = pd.read_csv(csv)
         if source is not None:
             df = filter_by_source(df, source)
-
         ids = df['image_id'].unique()
+
         files = map(lambda x: x + '.jpg', ids)
         self.images = make_dataset(image_dir, files)
         self.bboxes = parse_bboxes(df, ids, show_progress=show_progress)[0]
@@ -139,33 +139,39 @@ class ExtendedWheatDataset(Dataset):
         self.transforms = transforms
 
         df = pd.read_csv(csv)
-        ids = df['image_id'].unique()
-        bboxes, id_to_ordinal = parse_bboxes(df, ids, show_progress=show_progress)
-        self.bboxes = bboxes
-        self.id_to_ordinal = id_to_ordinal
-
         if source is not None:
             df = filter_by_source(df, source)
-            ids = df['image_id'].unique()
+        ids = df['image_id'].unique()
 
         files = map(lambda x: x + '.jpg', ids)
         self.images = make_dataset(image_dir, files)
         self.num_orig_images = len(self.images)
-
         if gen_image_dirs is not None:
-            ids = set(ids.tolist())
-            for img_dir in gen_image_dirs:
-                for file in os.listdir(img_dir):
-                    image_id = self._parse_image_id(file)
-                    # filter synthetic images the same way as the original ones
-                    # to avoid leakage on validation
-                    if image_id in ids:
-                        path = os.path.join(img_dir, file)
-                        self.images.append(path)
+            self._add_gen_images(gen_image_dirs, ids)
+
+        self.bboxes, self.id_to_ordinal = parse_bboxes(df, ids, show_progress=show_progress)
+        assert self.num_orig_images == len(self.bboxes)
+
+    def _add_gen_images(self, dirs: Iterable[str], ids: Union[np.ndarray, Iterable[str]]):
+        assert hasattr(self, "images")
+        ids = set(list(ids))
+
+        for img_dir in dirs:
+            for file in os.listdir(img_dir):
+                image_id = self._parse_image_id(file)
+                # filter synthetic images the same way as the original ones
+                # to avoid leakage on validation
+                if image_id in ids:
+                    path = os.path.join(img_dir, file)
+                    self.images.append(path)
 
     def __getitem__(self, index):
         path = self.images[index]
-        bboxes = self._find_bboxes(path)
+
+        if index < len(self.bboxes):
+            bboxes = self.bboxes[index]
+        else:
+            bboxes = self._find_orig_bboxes(path)
 
         if not os.path.exists(path):
             log.warning("Unable to read from {}".format(path))
@@ -196,7 +202,7 @@ class ExtendedWheatDataset(Dataset):
         image_id = str(image_id).split('_')[0]
         return image_id
 
-    def _find_bboxes(self, path: str) -> np.ndarray:
+    def _find_orig_bboxes(self, path: str) -> np.ndarray:
         file = os.path.split(path)[-1]
         image_id = self._parse_image_id(file)
         index = self.id_to_ordinal[image_id]

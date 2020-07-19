@@ -23,6 +23,7 @@ data:
       gen_image_dirs:
         - /media/dmitry/data/global-wheat-detection/synthetic/2020-07-19/15-13-08
       source: [ethz_1, arvalis_1, rres_1, arvalis_3]
+      show_progress: false
     orig_images_ratio: 0.5
     loader:
       # batch size per each device
@@ -52,6 +53,7 @@ data:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv
       source: [usask_1, arvalis_2, inrae_1]
+      show_progress: false
     loader:
       batch_size: 16
       workers: 2
