@@ -15,6 +15,8 @@ distributed:
   url: env://
 
 data:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
   train:
     class: data.dataset.ExtendedWheatDataset
     params:
@@ -40,13 +42,6 @@ data:
           height: 640
           width: 640
           interpolation: 3  # cv2.INTER_AREA
-      normalize:
-        class: albumentations.Normalize
-        params:
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
-      to_torch:
-        class: albumentations.pytorch.transforms.ToTensorV2
   val:
     class: data.dataset.WheatDataset
     params:
@@ -64,13 +59,6 @@ data:
           height: 640
           width: 640
           interpolation: 3  # cv2.INTER_AREA
-      normalize:
-        class: albumentations.Normalize
-        params:
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
-      to_torch:
-        class: albumentations.pytorch.transforms.ToTensorV2
 
 model:
   class: effdet.create_model_from_config

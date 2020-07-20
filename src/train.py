@@ -17,14 +17,14 @@ from ignite.handlers import Checkpoint, DiskSaver, TerminateOnNan
 from ignite.metrics import Metric, RunningAverage
 from ignite.utils import convert_tensor
 from omegaconf import DictConfig
-from torch import nn
+from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from tqdm import tqdm
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from data.dataset import ExtendedWheatDataset
 from data.sampler import CustomSampler
-from data.utils import basic_collate
+from data.loader import fast_collate
 from utils.typings import Batch, Device, FloatDict
 from utils.visualize import visualize_detections
 
@@ -75,23 +75,14 @@ def _prepare_batch(batch: Batch, device: torch.device, non_blocking: bool) -> Ba
     return convert_tensor(x, **kwargs), convert_tensor(y, **kwargs)
 
 
-def _prepare_batch_efficientdet(batch: Batch, device: Device, is_val=False):
-    images, bboxes = batch
-    images = images.to(device).float()
-    # TODO: add GPU transforms here
-    boxes, cls = [], []
+def _prepare_batch_efficientdet(batch, mean, std, device=None, is_val=False):
+    # type: (Batch, Tensor, Tensor, Device, Optional[bool]) -> Tuple[Tensor, Dict[str, Tensor]]
+    images, target = batch
+    images = images.permute(0, 3, 1, 2).to(device).float().sub_(mean).div_(std)
 
-    for b in bboxes:
-        c = torch.ones(len(b), device=device)
-        b = b.to(device).float()
-        boxes.append(b)
-        cls.append(c)
-
-    target = dict(bbox=boxes, cls=cls)
-    if is_val:
-        N, C, H, W = images.shape
-        target["img_scale"] = torch.ones(N, dtype=torch.float32, device=device)
-        target["img_size"] = torch.tensor([W, H], dtype=torch.int64, device=device).expand(N, 2)
+    if not is_val:
+        target = {k: v for k, v in target.items() if k in ['bbox', 'cls']}
+    target = {k: v.to(device) for k, v in target.items()}
     return images, target
 
 
@@ -148,7 +139,7 @@ def create_train_loader(conf, rank=None, num_replicas=None):
                         sampler=sampler,
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
-                        collate_fn=basic_collate,
+                        collate_fn=fast_collate,
                         drop_last=True,
                         shuffle=not sampler)
     return loader
@@ -167,7 +158,7 @@ def create_val_loader(conf, rank=None, num_replicas=None):
                         sampler=sampler,
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
-                        collate_fn=basic_collate,
+                        collate_fn=fast_collate,
                         drop_last=False,
                         shuffle=not sampler)
     return loader
@@ -276,10 +267,12 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
 
     update_freq = conf.optim.step_interval
+    mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
+    std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
 
     def _update(eng: Engine, batch: Batch) -> FloatDict:
         model.train()
-        batch = _prepare_batch_efficientdet(batch, device)
+        batch = _prepare_batch_efficientdet(batch, mean, std, device=device)
         losses: Dict = model(*batch)
         stats = {k: v.item() for k, v in losses.items()}
         loss = losses["loss"]
@@ -296,7 +289,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
     def _validate(eng: Engine, batch: Batch) -> FloatDict:
         model.eval()
-        images, targets = _prepare_batch_efficientdet(batch, device, is_val=True)
+        images, targets = _prepare_batch_efficientdet(batch, mean, std, device=device, is_val=True)
 
         with torch.no_grad():
             out: Dict = model(images, targets)
