@@ -17,7 +17,7 @@ from ignite.engine import Engine, Events
 from ignite.handlers import Checkpoint, DiskSaver, TerminateOnNan
 from ignite.metrics import Metric, RunningAverage
 from ignite.utils import convert_tensor
-from omegaconf import DictConfig, ListConfig
+from omegaconf import DictConfig
 from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from tqdm import tqdm

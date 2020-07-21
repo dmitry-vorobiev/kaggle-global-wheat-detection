@@ -92,7 +92,11 @@ def _process(image, bboxes, transforms=None):
     if transforms is not None:
         out = transforms(image=image, bboxes=bboxes)
         image, bboxes = out['image'], out['bboxes']
-        bboxes = np.stack(bboxes)
+
+        if len(bboxes) > 0:
+            bboxes = np.stack(bboxes)
+        else:
+            bboxes = np.empty((0, 5), dtype=np.float32)
     else:
         image = torch.from_numpy(image)
         bboxes = torch.from_numpy(bboxes)
