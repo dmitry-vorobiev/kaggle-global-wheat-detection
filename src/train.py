@@ -17,7 +17,7 @@ from ignite.engine import Engine, Events
 from ignite.handlers import Checkpoint, DiskSaver, TerminateOnNan
 from ignite.metrics import Metric, RunningAverage
 from ignite.utils import convert_tensor
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from tqdm import tqdm
@@ -107,7 +107,7 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
     transforms = [instantiate(v) for k, v in transforms.items()]
     compose = T.Compose
     compose_kwargs = dict()
-    if all(isinstance(t, A.BasicTransform) for t in transforms):
+    if any(isinstance(t, A.BasicTransform) for t in transforms):
         compose = A.Compose
         compose_kwargs["bbox_params"] = A.BboxParams('pascal_voc')
     transforms = compose(transforms, **compose_kwargs)
