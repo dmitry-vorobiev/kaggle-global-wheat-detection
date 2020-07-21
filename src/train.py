@@ -279,14 +279,13 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         losses: Dict = model(*batch)
         stats = {k: v.item() for k, v in losses.items()}
         loss = losses["loss"]
+        loss.backward()
         del losses
 
         it = eng.state.iteration
-        if not it % update_freq:
-            optim.zero_grad()
-        loss.backward()
         if not (it + 1) % update_freq:
             optim.step()
+            optim.zero_grad()
 
         return stats
 
