@@ -1,3 +1,4 @@
+import numpy as np
 import albumentations as A
 import datetime as dt
 import hydra
@@ -25,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from data.dataset import ExtendedWheatDataset
 from data.sampler import CustomSampler
 from data.loader import fast_collate
+from utils.metric import calculate_image_precision, IOU_THRESHOLDS
 from utils.typings import Batch, Device, FloatDict
 from utils.visualize import visualize_detections
 
@@ -267,6 +269,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
 
     update_freq = conf.optim.step_interval
+    calc_map = conf.validate.calc_map
+
     mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
     std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
 
@@ -294,15 +298,31 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         with torch.no_grad():
             out: Dict = model(images, targets)
 
-        _ = out.pop("detections")
+        pred_boxes = out.pop("detections")
         stats = {k: v.item() for k, v in out.items()}
+
+        if calc_map:
+            pred_boxes = pred_boxes[:, :4].detach().cpu().numpy()
+            true_boxes = targets['bbox'].cpu().numpy()
+
+            scores = [calculate_image_precision(true_boxes[i], pred_boxes[i],
+                                                thresholds=IOU_THRESHOLDS,
+                                                form='pascal_voc')
+                      for i in range(len(images))]
+
+            stats['mAP'] = np.mean(scores)
         return stats
 
-    metric_names = list(conf.logging.out)
-    metrics = create_metrics(metric_names, device if distributed else None)
+    train_metric_names = list(conf.logging.out.train)
+    train_metrics = create_metrics(train_metric_names, device if distributed else None)
 
-    trainer = build_engine(_update, metrics)
-    evaluator = build_engine(_validate, metrics)
+    val_metric_names = list(conf.logging.out.val)
+    if calc_map:
+        val_metric_names.append('mAP')
+    val_metrics = create_metrics(val_metric_names, device if distributed else None)
+
+    trainer = build_engine(_update, train_metrics)
+    evaluator = build_engine(_validate, val_metrics)
     to_save['trainer'] = trainer
 
     every_iteration = Events.ITERATION_COMPLETED
@@ -321,12 +341,13 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         log_interval = conf.logging.interval_it
         log_event = Events.ITERATION_COMPLETED(every=log_interval)
         pbar = ProgressBar(persist=False)
+        pbar.attach(trainer, metric_names=train_metric_names)
+        pbar.attach(evaluator, metric_names=val_metric_names)
 
         for engine, name in zip([trainer, evaluator], ['train', 'val']):
             engine.add_event_handler(Events.EPOCH_STARTED, on_epoch_start)
             engine.add_event_handler(log_event, log_iter, pbar, interval_it=log_interval, name=name)
             engine.add_event_handler(Events.EPOCH_COMPLETED, log_epoch, name=name)
-            pbar.attach(engine, metric_names=metric_names)
 
         setup_checkpoints(trainer, to_save, epoch_length, conf)
 

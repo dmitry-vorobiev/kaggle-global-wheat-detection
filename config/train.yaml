@@ -88,6 +88,7 @@ train:
 
 validate:
   interval_ep: 1
+  calc_map: true
 
 # Renders target and predicted bboxes on top of each image in the validation dataset.
 visualize:
@@ -107,6 +108,9 @@ logging:
   model: false
   interval_it: 100
   out:
-    - loss
-    - class_loss
-    - box_loss
+    train:
+      - loss
+      - box_loss
+    val:
+      - loss
+      - box_loss
