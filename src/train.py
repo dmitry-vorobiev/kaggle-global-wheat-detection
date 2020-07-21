@@ -1,3 +1,4 @@
+import numpy as np
 import albumentations as A
 import datetime as dt
 import hydra
@@ -17,14 +18,15 @@ from ignite.handlers import Checkpoint, DiskSaver, TerminateOnNan
 from ignite.metrics import Metric, RunningAverage
 from ignite.utils import convert_tensor
 from omegaconf import DictConfig
-from torch import nn
+from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from tqdm import tqdm
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from data.dataset import ExtendedWheatDataset
 from data.sampler import CustomSampler
-from data.utils import basic_collate
+from data.loader import fast_collate
+from utils.metric import calculate_image_precision, IOU_THRESHOLDS
 from utils.typings import Batch, Device, FloatDict
 from utils.visualize import visualize_detections
 
@@ -75,23 +77,14 @@ def _prepare_batch(batch: Batch, device: torch.device, non_blocking: bool) -> Ba
     return convert_tensor(x, **kwargs), convert_tensor(y, **kwargs)
 
 
-def _prepare_batch_efficientdet(batch: Batch, device: Device, is_val=False):
-    images, bboxes = batch
-    images = images.to(device).float()
-    # TODO: add GPU transforms here
-    boxes, cls = [], []
+def _prepare_batch_efficientdet(batch, mean, std, device=None, is_val=False):
+    # type: (Batch, Tensor, Tensor, Device, Optional[bool]) -> Tuple[Tensor, Dict[str, Tensor]]
+    images, target = batch
+    images = images.permute(0, 3, 1, 2).to(device).float().sub_(mean).div_(std)
 
-    for b in bboxes:
-        c = torch.ones(len(b), device=device)
-        b = b.to(device).float()
-        boxes.append(b)
-        cls.append(c)
-
-    target = dict(bbox=boxes, cls=cls)
-    if is_val:
-        N, C, H, W = images.shape
-        target["img_scale"] = torch.ones(N, dtype=torch.float32, device=device)
-        target["img_size"] = torch.tensor([W, H], dtype=torch.int64, device=device).expand(N, 2)
+    if not is_val:
+        target = {k: v for k, v in target.items() if k in ['bbox', 'cls']}
+    target = {k: v.to(device) for k, v in target.items()}
     return images, target
 
 
@@ -114,7 +107,7 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
     transforms = [instantiate(v) for k, v in transforms.items()]
     compose = T.Compose
     compose_kwargs = dict()
-    if all(isinstance(t, A.BasicTransform) for t in transforms):
+    if any(isinstance(t, A.BasicTransform) for t in transforms):
         compose = A.Compose
         compose_kwargs["bbox_params"] = A.BboxParams('pascal_voc')
     transforms = compose(transforms, **compose_kwargs)
@@ -148,7 +141,7 @@ def create_train_loader(conf, rank=None, num_replicas=None):
                         sampler=sampler,
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
-                        collate_fn=basic_collate,
+                        collate_fn=fast_collate,
                         drop_last=True,
                         shuffle=not sampler)
     return loader
@@ -167,7 +160,7 @@ def create_val_loader(conf, rank=None, num_replicas=None):
                         sampler=sampler,
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
-                        collate_fn=basic_collate,
+                        collate_fn=fast_collate,
                         drop_last=False,
                         shuffle=not sampler)
     return loader
@@ -276,10 +269,14 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
 
     update_freq = conf.optim.step_interval
+    calc_map = conf.validate.calc_map
+
+    mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
+    std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
 
     def _update(eng: Engine, batch: Batch) -> FloatDict:
         model.train()
-        batch = _prepare_batch_efficientdet(batch, device)
+        batch = _prepare_batch_efficientdet(batch, mean, std, device=device)
         losses: Dict = model(*batch)
         stats = {k: v.item() for k, v in losses.items()}
         loss = losses["loss"]
@@ -296,20 +293,36 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
     def _validate(eng: Engine, batch: Batch) -> FloatDict:
         model.eval()
-        images, targets = _prepare_batch_efficientdet(batch, device, is_val=True)
+        images, targets = _prepare_batch_efficientdet(batch, mean, std, device=device, is_val=True)
 
         with torch.no_grad():
             out: Dict = model(images, targets)
 
-        _ = out.pop("detections")
+        pred_boxes = out.pop("detections")
         stats = {k: v.item() for k, v in out.items()}
+
+        if calc_map:
+            pred_boxes = pred_boxes[:, :4].detach().cpu().numpy()
+            true_boxes = targets['bbox'].cpu().numpy()
+
+            scores = [calculate_image_precision(true_boxes[i], pred_boxes[i],
+                                                thresholds=IOU_THRESHOLDS,
+                                                form='pascal_voc')
+                      for i in range(len(images))]
+
+            stats['mAP'] = np.mean(scores)
         return stats
 
-    metric_names = list(conf.logging.out)
-    metrics = create_metrics(metric_names, device if distributed else None)
+    train_metric_names = list(conf.logging.out.train)
+    train_metrics = create_metrics(train_metric_names, device if distributed else None)
 
-    trainer = build_engine(_update, metrics)
-    evaluator = build_engine(_validate, metrics)
+    val_metric_names = list(conf.logging.out.val)
+    if calc_map:
+        val_metric_names.append('mAP')
+    val_metrics = create_metrics(val_metric_names, device if distributed else None)
+
+    trainer = build_engine(_update, train_metrics)
+    evaluator = build_engine(_validate, val_metrics)
     to_save['trainer'] = trainer
 
     every_iteration = Events.ITERATION_COMPLETED
@@ -328,12 +341,13 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         log_interval = conf.logging.interval_it
         log_event = Events.ITERATION_COMPLETED(every=log_interval)
         pbar = ProgressBar(persist=False)
+        pbar.attach(trainer, metric_names=train_metric_names)
+        pbar.attach(evaluator, metric_names=val_metric_names)
 
         for engine, name in zip([trainer, evaluator], ['train', 'val']):
             engine.add_event_handler(Events.EPOCH_STARTED, on_epoch_start)
             engine.add_event_handler(log_event, log_iter, pbar, interval_it=log_interval, name=name)
             engine.add_event_handler(Events.EPOCH_COMPLETED, log_epoch, name=name)
-            pbar.attach(engine, metric_names=metric_names)
 
         setup_checkpoints(trainer, to_save, epoch_length, conf)
 

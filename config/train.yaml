@@ -15,6 +15,8 @@ distributed:
   url: env://
 
 data:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
   train:
     class: data.dataset.ExtendedWheatDataset
     params:
@@ -30,23 +32,45 @@ data:
       batch_size: 8
       workers: 2
     transforms:
-      flip:
-        class: albumentations.Flip
-      rotate90:
-        class: albumentations.RandomRotate90
       resize:
         class: albumentations.Resize
         params:
           height: 640
           width: 640
           interpolation: 3  # cv2.INTER_AREA
-      normalize:
-        class: albumentations.Normalize
+      flip:
+        class: albumentations.Flip
         params:
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
-      to_torch:
-        class: albumentations.pytorch.transforms.ToTensorV2
+          p: 0.75
+      rotate90:
+        class: albumentations.RandomRotate90
+        params:
+          p: 0.75
+      affine:
+        class: data.transforms.affine
+        params:
+          shift_limit: 0
+          scale_limit: [0.05, 0.15]
+          rotate_limit: 25
+          p: 0.33
+      color:
+        class: data.transforms.color_jitter
+        params:
+          brightness_limit: 0.2
+          contrast_limit: 0.2
+          brightness_by_max: true
+          r_shift_limit: 20
+          g_shift_limit: 20
+          b_shift_limit: 20
+          hue_shift_limit: 15
+          sat_shift_limit: 30
+          val_shift_limit: 10
+          p: 0.75
+      enhance:
+        class: data.transforms.enhancer
+        params:
+          blur_limit: 5
+          p: 0.33
   val:
     class: data.dataset.WheatDataset
     params:
@@ -64,13 +88,6 @@ data:
           height: 640
           width: 640
           interpolation: 3  # cv2.INTER_AREA
-      normalize:
-        class: albumentations.Normalize
-        params:
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
-      to_torch:
-        class: albumentations.pytorch.transforms.ToTensorV2
 
 model:
   class: effdet.create_model_from_config
@@ -100,6 +117,7 @@ train:
 
 validate:
   interval_ep: 1
+  calc_map: true
 
 # Renders target and predicted bboxes on top of each image in the validation dataset.
 visualize:
@@ -119,6 +137,9 @@ logging:
   model: false
   interval_it: 100
   out:
-    - loss
-    - class_loss
-    - box_loss
+    train:
+      - loss
+      - box_loss
+    val:
+      - loss
+      - box_loss

@@ -85,6 +85,30 @@ def parse_bboxes(df, ids, show_progress=True):
     return bboxes, id_to_ordinal
 
 
+def _process(image, bboxes, transforms=None):
+    # type: (np.ndarray, np.ndarray, Optional[Transforms]) -> Tuple[Any, Dict[str, Any]]
+    H0, W0 = image.shape[:2]
+
+    if transforms is not None:
+        out = transforms(image=image, bboxes=bboxes)
+        image, bboxes = out['image'], out['bboxes']
+
+        if len(bboxes) > 0:
+            bboxes = np.stack(bboxes)
+        else:
+            bboxes = np.empty((0, 5), dtype=np.float32)
+    else:
+        image = torch.from_numpy(image)
+        bboxes = torch.from_numpy(bboxes)
+
+    H1, W1 = image.shape[:2]
+    target = dict(bbox=bboxes[:, :4],
+                  cls=np.array([1], dtype=np.int8),
+                  img_scale=min(H1 / H0, W1 / W0),
+                  img_size=(W0, H0))
+    return image, target
+
+
 class WheatDataset(Dataset):
     def __init__(self, image_dir, csv, transforms=None, show_progress=True, source=None):
         # type: (str, str, Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
@@ -103,6 +127,7 @@ class WheatDataset(Dataset):
 
     def __getitem__(self, index):
         path = self.images[index]
+        bboxes = self.bboxes[index]
 
         if not os.path.exists(path):
             log.warning("Unable to read from {}".format(path))
@@ -111,21 +136,7 @@ class WheatDataset(Dataset):
             return self[index]
 
         image = cv2_imread(path)
-        bboxes = self.bboxes[index]
-
-        if self.transforms is not None:
-            out = self.transforms(image=image, bboxes=bboxes)
-            image, bboxes = out['image'], out['bboxes']
-            bboxes = np.stack(bboxes)
-        else:
-            image = torch.from_numpy(image)
-            bboxes = torch.from_numpy(bboxes)
-
-        # Remove class label and downcast from float64 to int16
-        # to send less data to GPU. Some boxes have fractional part of .5,
-        # but for high res images this shouldn't be an issue
-        bboxes = bboxes[:, :4].astype(np.int16)
-        return image, bboxes
+        return _process(image, bboxes, self.transforms)
 
     def __len__(self):
         return len(self.images)
@@ -180,20 +191,7 @@ class ExtendedWheatDataset(Dataset):
             return self[index]
 
         image = cv2_imread(path)
-
-        if self.transforms is not None:
-            out = self.transforms(image=image, bboxes=bboxes)
-            image, bboxes = out['image'], out['bboxes']
-            bboxes = np.stack(bboxes)
-        else:
-            image = torch.from_numpy(image)
-            bboxes = torch.from_numpy(bboxes)
-
-        # Remove class label and downcast from float64 to int16
-        # to send less data to GPU. Some boxes have fractional part of .5,
-        # but for high res images this shouldn't be an issue
-        bboxes = bboxes[:, :4].astype(np.int16)
-        return image, bboxes
+        return _process(image, bboxes, self.transforms)
 
     @staticmethod
     def _parse_image_id(filename: str) -> str:
