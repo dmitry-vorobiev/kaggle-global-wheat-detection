@@ -26,7 +26,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from data.dataset import ExtendedWheatDataset
 from data.sampler import CustomSampler
 from data.loader import fast_collate
-from utils.metric import calculate_image_precision, IOU_THRESHOLDS
 from utils.typings import Batch, Device, FloatDict
 from utils.visualize import visualize_detections
 
@@ -318,6 +317,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
     val_metric_names = list(conf.logging.out.val)
     if calc_map:
+        from utils.metric import calculate_image_precision, IOU_THRESHOLDS
         val_metric_names.append('mAP')
     val_metrics = create_metrics(val_metric_names, device if distributed else None)
 
