@@ -103,12 +103,20 @@ model:
 # TODO: maybe add option for alternative losses
 
 optim:
-  class: torch.optim.Adam
+  class: torch.optim.SGD
   params:
-    lr: 0.001
-    betas: [0.9, 0.999]
-    eps: 1e-8
+    lr: 0.01  # max_lr = 0.016, batch_size = 128
+    momentum: 0.9
+    weight_decay: 4e-5
+    nesterov: false
   step_interval: 5
+
+# EMA of the model weights, alpha - decay rate
+smoothing:
+  enabled: true
+  use_cpu: true
+  alpha: 0.998
+  interval_it: 1
 
 train:
   skip: false

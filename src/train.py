@@ -2,6 +2,7 @@ import numpy as np
 import albumentations as A
 import datetime as dt
 import hydra
+import itertools
 import logging
 import math
 import os
@@ -18,7 +19,9 @@ from ignite.handlers import Checkpoint, DiskSaver, TerminateOnNan
 from ignite.metrics import Metric, RunningAverage
 from ignite.utils import convert_tensor
 from omegaconf import DictConfig
+from timm.optim.optim_factory import add_weight_decay
 from torch import nn, Tensor
+from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from tqdm import tqdm
 from typing import Any, Dict, List, Optional, Tuple
@@ -165,6 +168,15 @@ def create_val_loader(conf, rank=None, num_replicas=None):
     return loader
 
 
+def build_optimizer(conf: DictConfig, model: nn.Module) -> Optimizer:
+    parameters = model.parameters()
+    p = conf.params
+    if 'weight_decay' in p and p.weight_decay > 0:
+        parameters = add_weight_decay(model, p.weight_decay)
+        p.weight_decay = 0.0
+    return instantiate(conf, parameters)
+
+
 def setup_checkpoints(trainer, obj_to_save, epoch_length, conf):
     # type: (Engine, Dict[str, Any], int, DictConfig) -> None
     cp = conf.checkpoints
@@ -226,6 +238,37 @@ def setup_visualizations(trainer, model, dl, device, conf):
             del images, targets, predictions, out
 
 
+def setup_ema(conf: DictConfig, model: nn.Module, device=None, master_node=False,
+              distributed=False):
+    ema = conf.smoothing
+    model_ema = None
+    def _update(): pass
+
+    if master_node and ema.enabled:
+        model_ema = instantiate(conf.model)
+        if not ema.use_cpu:
+            model_ema = model_ema.to(device)
+        model_ema.load_state_dict(model.state_dict())
+        model_ema.requires_grad_(False)
+
+        beta = 1 - ema.alpha ** ema.interval_it
+        m = model.module if distributed else model
+
+        def _update():
+            all_shit = itertools.chain(
+                zip(model_ema.parameters(), m.parameters()),
+                zip(model_ema.buffers(), m.buffers()))
+
+            with torch.no_grad():
+                for t_ema, t in all_shit:
+                    # filter out *.bn1.num_batches_tracked
+                    if t.dtype != torch.int64:
+                        t = t.to(t_ema.device)
+                        t_ema.lerp_(t, beta)
+
+    return model_ema, _update
+
+
 def run(conf: DictConfig, local_rank=0, distributed=False):
     epochs = conf.train.epochs
     epoch_length = conf.train.epoch_length
@@ -256,9 +299,10 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         epoch_length = len(train_dl)
 
     model = instantiate(conf.model).to(device)
-    optim = instantiate(conf.optim, model.parameters())
-
-    to_save = dict(model=model, optim=optim)
+    model_ema, update_ema = setup_ema(
+        conf, model, device=device, master_node=master_node, distributed=distributed)
+    optim = build_optimizer(conf.optim, model)
+    to_save = dict(model=model, model_ema=model_ema, optim=optim)
 
     if master_node and conf.logging.model:
         logging.info(model)
@@ -267,7 +311,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         ddp_kwargs = dict(device_ids=[local_rank, ], output_device=local_rank)
         model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
 
-    update_freq = conf.optim.step_interval
+    upd_interval = conf.optim.step_interval
+    ema_interval = conf.smoothing.interval_it * upd_interval
     calc_map = conf.validate.calc_map
 
     mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
@@ -283,9 +328,12 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         del losses
 
         it = eng.state.iteration
-        if not (it + 1) % update_freq:
+        if not (it + 1) % upd_interval:
             optim.step()
             optim.zero_grad()
+
+            if not (it + 1) % ema_interval:
+                update_ema()
 
         return stats
 
