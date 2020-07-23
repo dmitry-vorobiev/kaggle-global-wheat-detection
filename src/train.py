@@ -20,6 +20,7 @@ from ignite.metrics import Metric, RunningAverage
 from ignite.utils import convert_tensor
 from omegaconf import DictConfig
 from timm.optim.optim_factory import add_weight_decay
+from timm.scheduler.scheduler import Scheduler
 from torch import nn, Tensor
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset, DistributedSampler
@@ -238,8 +239,7 @@ def setup_visualizations(trainer, model, dl, device, conf):
             del images, targets, predictions, out
 
 
-def setup_ema(conf: DictConfig, model: nn.Module, device=None, master_node=False,
-              distributed=False):
+def setup_ema(conf: DictConfig, model: nn.Module, device=None, master_node=False):
     ema = conf.smoothing
     model_ema = None
     def _update(): pass
@@ -252,15 +252,14 @@ def setup_ema(conf: DictConfig, model: nn.Module, device=None, master_node=False
         model_ema.requires_grad_(False)
 
         beta = 1 - ema.alpha ** ema.interval_it
-        m = model.module if distributed else model
 
         def _update():
-            all_shit = itertools.chain(
-                zip(model_ema.parameters(), m.parameters()),
-                zip(model_ema.buffers(), m.buffers()))
+            states = itertools.chain(
+                zip(model_ema.parameters(), model.parameters()),
+                zip(model_ema.buffers(), model.buffers()))
 
             with torch.no_grad():
-                for t_ema, t in all_shit:
+                for t_ema, t in states:
                     # filter out *.bn1.num_batches_tracked
                     if t.dtype != torch.int64:
                         t = t.to(t_ema.device)
@@ -299,9 +298,10 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         epoch_length = len(train_dl)
 
     model = instantiate(conf.model).to(device)
-    model_ema, update_ema = setup_ema(
-        conf, model, device=device, master_node=master_node, distributed=distributed)
+    model_ema, update_ema = setup_ema(conf, model, device=device, master_node=master_node)
     optim = build_optimizer(conf.optim, model)
+    lr_scheduler: Scheduler = instantiate(conf.lr_scheduler, optim)
+
     to_save = dict(model=model, model_ema=model_ema, optim=optim)
 
     if master_node and conf.logging.model:
@@ -328,11 +328,12 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         del losses
 
         it = eng.state.iteration
-        if not (it + 1) % upd_interval:
+        if not it % upd_interval:
             optim.step()
             optim.zero_grad()
+            lr_scheduler.step_update(it // upd_interval)
 
-            if not (it + 1) % ema_interval:
+            if not it % ema_interval:
                 update_ema()
 
         return stats
@@ -381,6 +382,12 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         def _set_epoch(eng: Engine):
             sampler.set_epoch(eng.state.epoch - 1)
 
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def _scheduler_step(eng: Engine):
+        # it starts from 1, so we don't need to add 1 here
+        ep = eng.state.epoch
+        lr_scheduler.step(ep)
+
     cp = conf.checkpoints
     pbar, pbar_vis = None, None
 
@@ -404,6 +411,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
             trainer.add_event_handler(Events.STARTED, _upd_pbar_iter_from_cp, pbar)
         Checkpoint.load_objects(to_load=to_save,
                                 checkpoint=torch.load(cp.load, map_location=device))
+        # epoch counter start from 1
+        lr_scheduler.step(trainer.state.epoch - 1)
 
     @trainer.on(Events.EPOCH_COMPLETED(every=conf.validate.interval_ep))
     def _run_validation(eng: Engine):

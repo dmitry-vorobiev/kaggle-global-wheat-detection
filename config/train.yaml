@@ -111,6 +111,30 @@ optim:
     nesterov: false
   step_interval: 5
 
+lr_scheduler:
+  # https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/cosine_lr.py
+  # https://github.com/rwightman/efficientdet-pytorch/blob/master/train.py
+  class: timm.scheduler.cosine_lr.CosineLRScheduler
+  params:
+    # num epochs
+    t_initial: 100
+    # learning rate cycle len multiplier
+    t_mul: 1.0
+    # lower lr bound for cyclic schedulers that hit 0
+    lr_min: 1e-5
+    # LR decay rate
+    decay_rate: 0.1
+    warmup_lr_init: 0.0001
+    # epochs to warmup LR
+    warmup_t: 5
+    # learning rate cycle limit
+    cycle_limit: 1
+    t_in_epochs: true
+    noise_range_t: ~
+    noise_pct: 0.67
+    noise_std: 1.0
+    noise_seed: 333
+
 # EMA of the model weights, alpha - decay rate
 smoothing:
   enabled: true
