@@ -44,41 +44,46 @@ class CustomSampler(Sampler):
         self.num_replicas = num_replicas
         self.rank = rank
         self.epoch = 0
-        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        self.num_samples = int(math.ceil(self._num_images * 1.0 / self.num_replicas))
         self.total_size = self.num_samples * self.num_replicas
         self.shuffle = shuffle
+
+    @property
+    def _num_images(self):
+        return int(round(self._num_orig_images / self.orig_images_ratio))
+
+    @property
+    def _num_orig_images(self):
+        return self.dataset.num_orig_images
 
     def __iter__(self):
         # deterministically shuffle based on epoch
         g = torch.Generator()
         g.manual_seed(self.epoch)
 
-        num_orig = self.dataset.num_orig_images
-        num_gen = len(self.dataset) - num_orig
-
-        take_orig = int(round(len(self.dataset) * self.orig_images_ratio))
-        take_gen = len(self.dataset) - take_orig
+        total_gen_images = len(self.dataset) - self._num_orig_images
+        num_gen_images = self._num_images - self._num_orig_images
 
         if self.shuffle:
-            def _rnd_indices(length, total):
-                idxs = [torch.randperm(length, generator=g)[:total]
-                        for _ in range(0, total, length)]
-                return torch.cat(idxs)[:total]
+            def _rnd_indices(max_value, num_samples):
+                idxs = [torch.randperm(max_value, generator=g)
+                        for _ in range(0, num_samples, max_value)]
+                return torch.cat(idxs)[:num_samples]
 
-            orig_indices = _rnd_indices(num_orig, take_orig)
-            gen_indices = _rnd_indices(num_gen, take_gen) + num_orig
+            orig_indices = torch.randperm(self._num_orig_images, generator=g)
+            gen_indices = _rnd_indices(total_gen_images, num_gen_images) + self._num_orig_images
 
             indices = torch.cat([orig_indices, gen_indices])
             ii = torch.randperm(len(indices), generator=g)
             indices = indices[ii].tolist()
         else:
-            def _rnd_indices(start, end, total):
-                repeats = math.ceil(total / (end - start))
+            def _rnd_indices(start, end, num_samples):
+                repeats = math.ceil(num_samples / (end - start))
                 idxs = [i for _ in range(repeats) for i in range(start, end)]
-                return idxs[:total]
+                return idxs[:num_samples]
 
-            indices = _rnd_indices(0, num_orig, take_orig)
-            indices += _rnd_indices(num_orig, len(self.dataset), take_gen)
+            indices = range(self._num_orig_images)
+            indices += _rnd_indices(self._num_orig_images, len(self.dataset), num_gen_images)
 
         # add extra samples to make it evenly divisible
         indices += indices[:(self.total_size - len(indices))]

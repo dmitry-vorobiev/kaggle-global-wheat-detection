@@ -1,7 +1,7 @@
 # Simple augmentations
 
 My pipeline. Keep in mind, that docs can be outdated, 
-so lease check the [current config](../config/train.yaml).
+so please check the [current config](../config/train.yaml).
 
 ```python
 import albumentations as A
