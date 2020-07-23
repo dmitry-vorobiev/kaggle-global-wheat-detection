@@ -28,6 +28,9 @@ data:
       show_progress: false
       # only for tf-ported efficient_det models
       box_format: yxyx
+    bbox_params:
+      format: pascal_voc
+      min_visibility: 0.05
     orig_images_ratio: 0.5
     loader:
       # batch size per each device
@@ -84,6 +87,9 @@ data:
       show_progress: false
       # only for tf-ported efficient_det models
       box_format: yxyx
+    bbox_params:
+      format: pascal_voc
+      min_visibility: 0.05
     loader:
       batch_size: 4
       workers: 2

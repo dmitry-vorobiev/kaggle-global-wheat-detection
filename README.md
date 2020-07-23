@@ -5,6 +5,7 @@ Code for Global Wheat Detection competition, hosted on
 ## Notes
 1. [Generate data with style augmentation](./info/DATA.md)
 2. [EffDet from Ross Wightman](./info/EFFDET.md)
+3. [Albumentation pipeline](./info/AUGS.md)
 
 ## Configuration
 

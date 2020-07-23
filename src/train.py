@@ -112,7 +112,7 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
     compose_kwargs = dict()
     if any(isinstance(t, A.BasicTransform) for t in transforms):
         compose = A.Compose
-        compose_kwargs["bbox_params"] = A.BboxParams('pascal_voc')
+        compose_kwargs["bbox_params"] = A.BboxParams(**conf.bbox_params)
     transforms = compose(transforms, **compose_kwargs)
 
     if show_progress:
