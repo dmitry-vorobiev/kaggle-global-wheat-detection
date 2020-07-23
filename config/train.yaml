@@ -26,6 +26,8 @@ data:
         - /media/dmitry/data/global-wheat-detection/synthetic/2020-07-19/15-13-08
       source: [ethz_1, arvalis_1, rres_1, arvalis_3]
       show_progress: false
+      # only for tf-ported efficient_det models
+      box_format: yxyx
     orig_images_ratio: 0.5
     loader:
       # batch size per each device
@@ -78,6 +80,8 @@ data:
       csv: /media/dmitry/data/global-wheat-detection/train.csv
       source: [usask_1, arvalis_2, inrae_1]
       show_progress: false
+      # only for tf-ported efficient_det models
+      box_format: yxyx
     loader:
       batch_size: 4
       workers: 2

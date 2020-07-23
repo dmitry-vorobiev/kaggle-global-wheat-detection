@@ -85,8 +85,8 @@ def parse_bboxes(df, ids, show_progress=True):
     return bboxes, id_to_ordinal
 
 
-def _process(image, bboxes, transforms=None):
-    # type: (np.ndarray, np.ndarray, Optional[Transforms]) -> Tuple[Any, Dict[str, Any]]
+def _process(image, bboxes, transforms=None, box_format="xyxy"):
+    # type: (np.ndarray, np.ndarray, Optional[Transforms], Optional[str]) -> Tuple[Any, Dict[str, Any]]
     H0, W0 = image.shape[:2]
 
     if transforms is not None:
@@ -94,26 +94,37 @@ def _process(image, bboxes, transforms=None):
         image, bboxes = out['image'], out['bboxes']
 
         if len(bboxes) > 0:
-            bboxes = np.stack(bboxes)
+            bboxes = np.stack(bboxes)[:, :4]
         else:
-            bboxes = np.empty((0, 5), dtype=np.float32)
+            bboxes = np.empty((0, 4), dtype=np.float32)
     else:
         image = torch.from_numpy(image)
-        bboxes = torch.from_numpy(bboxes)
+        bboxes = torch.from_numpy(bboxes)[:, :4]
+
+    if box_format == "yxyx":
+        bboxes = bboxes[:, [1, 0, 3, 2]]
 
     H1, W1 = image.shape[:2]
-    target = dict(bbox=bboxes[:, :4],
+    target = dict(bbox=bboxes,
                   cls=np.array([1], dtype=np.int8),
                   img_scale=min(H1 / H0, W1 / W0),
                   img_size=(W0, H0))
     return image, target
 
 
+def check_box_format(box_format: str) -> None:
+    if box_format not in ["xyxy", "yxyx"]:
+        raise AttributeError("Box format '{}' is unsupported".format(box_format))
+
+
 class WheatDataset(Dataset):
-    def __init__(self, image_dir, csv, transforms=None, show_progress=True, source=None):
-        # type: (str, str, Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
+    def __init__(self, image_dir, csv, transforms=None, show_progress=True, source=None,
+                 box_format="xyxy"):
+        # type: (str, str, Optional[Transforms], Optional[bool], Optional[DataSource], Optional[str]) -> None
         super(WheatDataset, self).__init__()
+        check_box_format(box_format)
         self.transforms = transforms
+        self.box_format = box_format
 
         df = pd.read_csv(csv)
         if source is not None:
@@ -136,7 +147,7 @@ class WheatDataset(Dataset):
             return self[index]
 
         image = cv2_imread(path)
-        return _process(image, bboxes, self.transforms)
+        return _process(image, bboxes, self.transforms, self.box_format)
 
     def __len__(self):
         return len(self.images)
@@ -144,10 +155,12 @@ class WheatDataset(Dataset):
 
 class ExtendedWheatDataset(Dataset):
     def __init__(self, image_dir, csv, gen_image_dirs=None, transforms=None, show_progress=True,
-                 source=None):
-        # type: (str, str, Optional[Iterable[str]], Optional[Transforms], Optional[bool], Optional[DataSource]) -> None
+                 source=None, box_format="xyxy"):
+        # type: (str, str, Optional[Iterable[str]], Optional[Transforms], Optional[bool], Optional[DataSource], Optional[str]) -> None
         super(ExtendedWheatDataset, self).__init__()
+        check_box_format(box_format)
         self.transforms = transforms
+        self.box_format = box_format
 
         df = pd.read_csv(csv)
         if source is not None:
@@ -191,7 +204,7 @@ class ExtendedWheatDataset(Dataset):
             return self[index]
 
         image = cv2_imread(path)
-        return _process(image, bboxes, self.transforms)
+        return _process(image, bboxes, self.transforms, self.box_format)
 
     @staticmethod
     def _parse_image_id(filename: str) -> str:
