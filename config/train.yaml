@@ -35,11 +35,12 @@ data:
       workers: 2
     transforms:
       resize:
-        class: albumentations.Resize
+        class: data.transforms.resize_or_crop
         params:
           height: 896
           width: 896
-          interpolation: 3  # cv2.INTER_AREA
+          # INTER_NEAREST, INTER_LINEAR, INTER_CUBIC, INTER_AREA
+          interpolation: [0, 1, 2, 3]
       flip:
         class: albumentations.Flip
         params:
@@ -53,7 +54,8 @@ data:
         params:
           shift_limit: 0
           scale_limit: [0.05, 0.15]
-          rotate_limit: 25
+          rotate_limit: 20
+          interpolation: 2  # INTER_CUBIC
           p: 0.33
       color:
         class: data.transforms.color_jitter
@@ -91,7 +93,7 @@ data:
         params:
           height: 896
           width: 896
-          interpolation: 3  # cv2.INTER_AREA
+          interpolation: 1  # INTER_LINEAR
 
 model:
   class: effdet.create_model_from_config

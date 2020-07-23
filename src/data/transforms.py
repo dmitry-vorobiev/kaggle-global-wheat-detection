@@ -9,6 +9,21 @@ def as_tuple(v):
     return tuple(v) if hasattr(v, '__getitem__') else v
 
 
+def resize_or_crop(height: int, width: int, interpolation=cv2.INTER_LINEAR):
+    def _build_resize(method):
+        return A.Resize(height, width, interpolation=method, p=1.0)
+
+    if hasattr(interpolation, '__iter__'):
+        resize = A.OneOf(list(map(_build_resize, interpolation)), p=1.0)
+    else:
+        resize = _build_resize(interpolation)
+
+    return A.OneOf([
+        resize,
+        A.RandomCrop(height, width, p=1.0),
+    ], p=1.0)
+
+
 def affine(shift_limit=0.0625, scale_limit=0.1, rotate_limit=45, interpolation=cv2.INTER_LINEAR,
            border_mode=cv2.BORDER_REFLECT_101, p=0.5,):
     return A.ShiftScaleRotate(shift_limit=as_tuple(shift_limit),
