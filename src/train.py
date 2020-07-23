@@ -377,7 +377,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     trainer.add_event_handler(every_iteration, TerminateOnNan())
 
     sampler = train_dl.sampler
-    if isinstance(sampler, DistributedSampler):
+    if isinstance(sampler, (CustomSampler, DistributedSampler)):
         @trainer.on(Events.EPOCH_STARTED)
         def _set_epoch(eng: Engine):
             sampler.set_epoch(eng.state.epoch - 1)
