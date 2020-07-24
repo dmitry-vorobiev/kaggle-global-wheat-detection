@@ -4,7 +4,7 @@ hydra:
 
 defaults:
   - model/effdet/base
-  - model: effdet/tf_d3
+  - model: effdet/tf_d2
 
 general:
   gpu: 1
@@ -26,20 +26,21 @@ data:
         - /media/dmitry/data/global-wheat-detection/synthetic/2020-07-19/15-13-08
       source: [ethz_1, arvalis_1, rres_1, arvalis_3]
       show_progress: false
+      box_format: yxyx
     bbox_params:
       format: pascal_voc
       min_visibility: 0.05
     orig_images_ratio: 0.5
     loader:
       # batch size per each device
-      batch_size: 2
+      batch_size: 4
       workers: 2
     transforms:
       resize:
         class: data.transforms.resize_or_crop
         params:
-          height: 896
-          width: 896
+          height: 768
+          width: 768
           # INTER_NEAREST, INTER_LINEAR, INTER_CUBIC, INTER_AREA
           interpolation: [0, 1, 2, 3]
       flip:
@@ -83,28 +84,29 @@ data:
       csv: /media/dmitry/data/global-wheat-detection/train.csv
       source: [usask_1, arvalis_2, inrae_1]
       show_progress: false
+      box_format: yxyx
     bbox_params:
       format: pascal_voc
       min_visibility: 0.05
     loader:
-      batch_size: 4
+      batch_size: 8
       workers: 2
     transforms:
       resize:
         class: albumentations.Resize
         params:
-          height: 896
-          width: 896
+          height: 768
+          width: 768
           interpolation: 1  # INTER_LINEAR
 
 model:
-  class: effdet.create_model_from_config
+  class: models.effdet.create_model_from_config
   params:
     config:
-      pretrained_backbone: true
-      num_classes: 1
+      num_classes: 90
+      pretrained_backbone: false
     bench_name: train
-    pretrained: false
+    pretrained: true
     checkpoint_path: ''
 
 # loss inside DetTrainBench
@@ -117,7 +119,7 @@ optim:
     momentum: 0.9
     weight_decay: 4e-5
     nesterov: false
-  step_interval: 5
+  step_interval: 8 # * 4 = 32
 
 lr_scheduler:
   # https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/cosine_lr.py
@@ -125,7 +127,7 @@ lr_scheduler:
   class: timm.scheduler.cosine_lr.CosineLRScheduler
   params:
     # num epochs
-    t_initial: 100
+    t_initial: 300
     # learning rate cycle len multiplier
     t_mul: 1.0
     # lower lr bound for cyclic schedulers that hit 0

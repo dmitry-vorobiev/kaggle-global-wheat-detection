@@ -411,8 +411,10 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
             trainer.add_event_handler(Events.STARTED, _upd_pbar_iter_from_cp, pbar)
         Checkpoint.load_objects(to_load=to_save,
                                 checkpoint=torch.load(cp.load, map_location=device))
+        state = trainer.state
         # epoch counter start from 1
-        lr_scheduler.step(trainer.state.epoch - 1)
+        lr_scheduler.step(state.epoch - 1)
+        state.max_epochs = epochs
 
     @trainer.on(Events.EPOCH_COMPLETED(every=conf.validate.interval_ep))
     def _run_validation(eng: Engine):

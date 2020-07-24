@@ -106,7 +106,7 @@ def _process(image, bboxes, transforms=None, box_format="xyxy"):
 
     H1, W1 = image.shape[:2]
     target = dict(bbox=bboxes,
-                  cls=np.array([1], dtype=np.int8),
+                  cls=np.array([1], dtype=np.int64),
                   img_scale=min(H1 / H0, W1 / W0),
                   img_size=(W0, H0))
     return image, target
