@@ -101,6 +101,9 @@ def _process(image, bboxes, transforms=None, box_format="xyxy"):
         image = torch.from_numpy(image)
         bboxes = torch.from_numpy(bboxes)[:, :4]
 
+    # we don't use ToTensor() pipe, so H, W, C -> C, H, W
+    image = image.transpose(2, 0, 1)
+
     if box_format == "yxyx":
         bboxes = bboxes[:, [1, 0, 3, 2]]
 

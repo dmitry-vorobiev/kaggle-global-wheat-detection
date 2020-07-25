@@ -29,11 +29,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from data.dataset import ExtendedWheatDataset
 from data.sampler import CustomSampler
-from data.loader import fast_collate
+from data.loader import fast_collate, PrefetchLoader
 from utils.typings import Batch, Device, FloatDict
 from utils.visualize import visualize_detections
 
 Metrics = Dict[str, Metric]
+float_3 = Tuple[float, float, float]
 
 
 def humanize_time(timestamp: float) -> str:
@@ -74,21 +75,37 @@ def build_engine(loop_func, metrics=None):
     return trainer
 
 
-def _prepare_batch(batch: Batch, device: torch.device, non_blocking: bool) -> Batch:
-    kwargs = dict(device=device, non_blocking=non_blocking)
-    x, y = batch
-    return convert_tensor(x, **kwargs), convert_tensor(y, **kwargs)
+def _build_process_batch_func(conf: DictConfig, stage="train", device=None):
+    # conf -> root.data
+    assert stage in ["train", "val"]
+    is_val = stage == "val"
+    c = getattr(conf, stage)  # root.data.train
+    prefetch = c.loader.prefetch
 
+    def _filter_targets(target):
+        return {k: v for k, v in target.items() if k in ['bbox', 'cls']}
 
-def _prepare_batch_efficientdet(batch, mean, std, device=None, is_val=False):
-    # type: (Batch, Tensor, Tensor, Device, Optional[bool]) -> Tuple[Tensor, Dict[str, Tensor]]
-    images, target = batch
-    images = images.permute(0, 3, 1, 2).to(device).float().sub_(mean).div_(std)
+    if prefetch and is_val:
+        def _handle(batch: Batch) -> Batch:
+            return batch
 
-    if not is_val:
-        target = {k: v for k, v in target.items() if k in ['bbox', 'cls']}
-    target = {k: v.to(device) for k, v in target.items()}
-    return images, target
+    elif prefetch and not is_val:
+        def _handle(batch: Batch) -> Batch:
+            return batch[0], _filter_targets(batch[1])
+
+    else:
+        mean = torch.tensor(list(conf.mean)).to(device).view(1, 3, 1, 1).mul_(255)
+        std = torch.tensor(list(conf.std)).to(device).view(1, 3, 1, 1).mul_(255)
+
+        def _handle(batch: Batch) -> Batch:
+            images, target = batch
+            images = images.to(device).float().sub_(mean).div_(std)
+            if not is_val:
+                target = _filter_targets(target)
+            target = {k: v.to(device) for k, v in target.items()}
+            return images, target
+
+    return _handle
 
 
 def create_metrics(keys: List[str], device: Device = None) -> Metrics:
@@ -126,8 +143,8 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
     return ds
 
 
-def create_train_loader(conf, rank=None, num_replicas=None):
-    # type: (DictConfig, Optional[int], Optional[int]) -> DataLoader
+def create_train_loader(conf, rank=None, num_replicas=None, mean=None, std=None):
+    # type: (DictConfig, Optional[int], Optional[int], Optional[float_3], Optional[float_3]) -> DataLoader
     show_progress = rank is None or rank == 0
     data = create_dataset(conf, conf.transforms, show_progress=show_progress, name="train")
 
@@ -147,11 +164,13 @@ def create_train_loader(conf, rank=None, num_replicas=None):
                         collate_fn=fast_collate,
                         drop_last=True,
                         shuffle=not sampler)
+    if conf.loader.prefetch:
+        loader = PrefetchLoader(loader, mean=mean, std=std)
     return loader
 
 
-def create_val_loader(conf, rank=None, num_replicas=None):
-    # type: (DictConfig, Optional[int], Optional[int]) -> DataLoader
+def create_val_loader(conf, rank=None, num_replicas=None, mean=None, std=None):
+    # type: (DictConfig, Optional[int], Optional[int], Optional[float_3], Optional[float_3]) -> DataLoader
     show_progress = rank is None or rank == 0
     data = create_dataset(conf, conf.transforms, show_progress=show_progress, name="val")
 
@@ -166,6 +185,8 @@ def create_val_loader(conf, rank=None, num_replicas=None):
                         collate_fn=fast_collate,
                         drop_last=False,
                         shuffle=not sampler)
+    if conf.loader.prefetch:
+        loader = PrefetchLoader(loader, mean=mean, std=std)
     return loader
 
 
@@ -217,10 +238,11 @@ def setup_visualizations(trainer, model, dl, device, conf):
 
         data = iter(dl)
         model.eval()
+        _handle_batch_val = _build_process_batch_func(conf.data, stage="val", device=device)
 
         for i_batch in tqdm(range(iterations), desc="Saving visualizations"):
             batch = next(data)
-            images, targets = _prepare_batch_efficientdet(batch, device, is_val=True)
+            images, targets = _handle_batch_val(batch)
 
             with torch.no_grad():
                 out: Dict = model(images, targets)
@@ -282,7 +304,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         num_replicas = 1
         torch.cuda.set_device(conf.general.gpu)
     device = torch.device('cuda')
-    loader_args = dict()
+    loader_args = dict(mean=conf.data.mean, std=conf.data.std)
     master_node = rank == 0
 
     if master_node:
@@ -315,12 +337,12 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     ema_interval = conf.smoothing.interval_it * upd_interval
     calc_map = conf.validate.calc_map
 
-    mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
-    std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
+    _handle_batch_train = _build_process_batch_func(conf.data, stage="train", device=device)
+    _handle_batch_val = _build_process_batch_func(conf.data, stage="val", device=device)
 
     def _update(eng: Engine, batch: Batch) -> FloatDict:
         model.train()
-        batch = _prepare_batch_efficientdet(batch, mean, std, device=device)
+        batch = _handle_batch_train(batch)
         losses: Dict = model(*batch)
         stats = {k: v.item() for k, v in losses.items()}
         loss = losses["loss"]
@@ -340,7 +362,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
     def _validate(eng: Engine, batch: Batch) -> FloatDict:
         model.eval()
-        images, targets = _prepare_batch_efficientdet(batch, mean, std, device=device, is_val=True)
+        images, targets = _handle_batch_val(batch)
 
         with torch.no_grad():
             out: Dict = model(images, targets)
