@@ -336,6 +336,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     upd_interval = conf.optim.step_interval
     ema_interval = conf.smoothing.interval_it * upd_interval
     calc_map = conf.validate.calc_map
+    clip_grad = conf.optim.clip_grad
 
     _handle_batch_train = _build_process_batch_func(conf.data, stage="train", device=device)
     _handle_batch_val = _build_process_batch_func(conf.data, stage="val", device=device)
@@ -351,6 +352,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
         it = eng.state.iteration
         if not it % upd_interval:
+            if clip_grad > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
             optim.step()
             optim.zero_grad()
             lr_scheduler.step_update(it // upd_interval)

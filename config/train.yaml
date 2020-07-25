@@ -121,6 +121,7 @@ optim:
     momentum: 0.9
     weight_decay: 4e-5
     nesterov: false
+  clip_grad: 10.0
   step_interval: 8 # * 4 = 32
 
 lr_scheduler:
