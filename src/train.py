@@ -373,10 +373,10 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         stats = {k: v.item() for k, v in out.items()}
 
         if calc_map:
-            pred_boxes = pred_boxes[:, :4].detach().cpu().numpy()
+            pred_boxes = pred_boxes.detach().cpu().numpy()
             true_boxes = targets['bbox'].cpu().numpy()
 
-            scores = [calculate_image_precision(true_boxes[i], pred_boxes[i],
+            scores = [calculate_image_precision(true_boxes[i], pred_boxes[i, :, :4],
                                                 thresholds=IOU_THRESHOLDS,
                                                 form='coco')
                       for i in range(len(images))]
