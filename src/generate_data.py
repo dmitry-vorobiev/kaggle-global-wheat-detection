@@ -43,7 +43,9 @@ def create_data_loader(conf: DictConfig) -> DataLoader:
 
 @hydra.main(config_path="../config/generate_data.yaml")
 def main(conf: DictConfig):
-    torch.manual_seed(conf.seed)
+    if 'seed' in conf and conf.seed:
+        torch.manual_seed(conf.seed)
+
     torch.cuda.set_device(conf.gpu)
     device = torch.device('cuda')
     num_images = conf.out.num_images
