@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 
 from effdet import DetBenchTrain, DetBenchPredict, EfficientDet, load_checkpoint, load_pretrained
 from effdet.efficientdet import HeadNet
@@ -32,9 +33,10 @@ def create_model_from_config(config, bench_name='', pretrained=False, checkpoint
     elif pretrained:
         load_pretrained(model, config.url)
 
+    config = copy.deepcopy(config)
     # override num classes
-    model.class_net = HeadNet(config, num_outputs=1, norm_kwargs=dict(eps=0.001, momentum=0.01))
     config.num_classes = 1
+    model.class_net = HeadNet(config, num_outputs=1, norm_kwargs=dict(eps=0.001, momentum=0.01))
 
     # wrap model in task specific bench if set
     if bench_name == 'train':

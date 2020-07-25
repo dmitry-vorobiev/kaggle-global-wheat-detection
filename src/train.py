@@ -354,7 +354,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
             scores = [calculate_image_precision(true_boxes[i], pred_boxes[i],
                                                 thresholds=IOU_THRESHOLDS,
-                                                form='pascal_voc')
+                                                form='coco')
                       for i in range(len(images))]
 
             stats['mAP'] = np.mean(scores)

@@ -19,7 +19,6 @@
 # limitations under the License.
 #
 model:
-  class: effdet.create_model_from_config
   params:
     config:
       # feature + anchor config

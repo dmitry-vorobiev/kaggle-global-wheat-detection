@@ -100,10 +100,10 @@ data:
           interpolation: 1  # INTER_LINEAR
 
 model:
-  class: models.effdet.create_model_from_config
+  class: models.efficient_det.create_model_from_config
   params:
     config:
-      num_classes: 90
+      num_classes: 90  # to load pretrained weights
       pretrained_backbone: false
     bench_name: train
     pretrained: true
@@ -182,6 +182,8 @@ logging:
     train:
       - loss
       - box_loss
+      - class_loss
     val:
       - loss
       - box_loss
+      - class_loss
