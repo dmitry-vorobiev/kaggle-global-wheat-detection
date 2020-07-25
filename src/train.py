@@ -17,7 +17,6 @@ from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Checkpoint, DiskSaver, TerminateOnNan
 from ignite.metrics import Metric, RunningAverage
-from ignite.utils import convert_tensor
 from omegaconf import DictConfig
 from timm.optim.optim_factory import add_weight_decay
 from timm.scheduler.scheduler import Scheduler
@@ -382,7 +381,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
                                                 form='coco')
                       for i in range(len(images))]
 
-            stats['mAP'] = np.mean(scores)
+            stats['map'] = np.mean(scores)
         return stats
 
     train_metric_names = list(conf.logging.out.train)
@@ -391,7 +390,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     val_metric_names = list(conf.logging.out.val)
     if calc_map:
         from utils.metric import calculate_image_precision, IOU_THRESHOLDS
-        val_metric_names.append('mAP')
+        val_metric_names.append('map')
     val_metrics = create_metrics(val_metric_names, device if distributed else None)
 
     trainer = build_engine(_update, train_metrics)
