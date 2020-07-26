@@ -1,0 +1,42 @@
+hydra:
+  run:
+    dir: /media/dmitry/data/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+defaults:
+  - model/effdet/base
+  - model: effdet/tf_d2
+
+gpu: 1
+seed: ~
+
+out:
+  dir: /media/dmitry/data/global-wheat-detection/prediction/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  file: submission.csv
+
+data:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+  class: data.no_labels.ImagesWithFileNames
+  params:
+    image_dir: /media/dmitry/data/global-wheat-detection/test
+    metadata: true
+  loader:
+    batch_size: 10
+    workers: 2
+  transforms:
+    resize:
+      class: albumentations.Resize
+      params:
+        height: 768
+        width: 768
+        interpolation: 1  # INTER_LINEAR
+
+model:
+  class: models.efficient_det.create_model_from_config
+  params:
+    config:
+      num_classes: 1
+      pretrained_backbone: false
+    bench_name: predict
+    pretrained: false
+    checkpoint_path: ''
