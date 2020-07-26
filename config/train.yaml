@@ -23,7 +23,12 @@ data:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv
       gen_image_dirs:
-        - /media/dmitry/data/global-wheat-detection/synthetic/2020-07-19/15-13-08
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_20/2020-07-25/16-55-14
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_25/2020-07-25/18-13-32
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_30/2020-07-25/18-59-37
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_35/2020-07-25/19-54-04
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_40/2020-07-25/20-17-52
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_45/2020-07-25/21-42-20
       source: [ethz_1, arvalis_1, rres_1, arvalis_3]
       show_progress: false
       box_format: yxyx
