@@ -121,22 +121,22 @@ def _upd_pbar_iter_from_cp(engine: Engine, pbar: ProgressBar) -> None:
     pbar.n = engine.state.iteration
 
 
-def create_dataset(conf, transforms, show_progress=False, name="train"):
-    # type: (DictConfig, DictConfig, Optional[bool], Optional[str]) -> Dataset
-    transforms = [instantiate(v) for k, v in transforms.items()]
-    compose = T.Compose
-    compose_kwargs = dict()
-    if any(isinstance(t, A.BasicTransform) for t in transforms):
-        compose = A.Compose
-        compose_kwargs["bbox_params"] = A.BboxParams(**conf.bbox_params)
-    transforms = compose(transforms, **compose_kwargs)
+def create_dataset(conf, show_progress=False, name="train"):
+    # type: (DictConfig, Optional[bool], Optional[str]) -> Dataset
+    def _build_tfm(conf_tfm: DictConfig):
+        tfm = [instantiate(v) for k, v in conf_tfm.items()]
+        tfm = A.Compose(tfm, bbox_params=A.BboxParams(**conf.bbox_params, label_fields=["cls"]))
+        return tfm
 
     if show_progress:
         print("Loading {} data...".format(name))
     ds = instantiate(conf, show_progress=show_progress)
     # hydra will raise "ValueError: key transforms: Compose is not a primitive type",
     # if you try to pass transforms directly to instantiate(...)
-    ds.transforms = transforms
+    for field in ["transforms", "affine_tfm", "affine_tfm_mosaic"]:
+        if field in conf:
+            c = getattr(conf, field)
+            setattr(ds, field, _build_tfm(c))
     if show_progress:
         print("{}: {} images".format(name, len(ds)))
     return ds
@@ -145,7 +145,7 @@ def create_dataset(conf, transforms, show_progress=False, name="train"):
 def create_train_loader(conf, rank=None, num_replicas=None, mean=None, std=None):
     # type: (DictConfig, Optional[int], Optional[int], Optional[float_3], Optional[float_3]) -> DataLoader
     show_progress = rank is None or rank == 0
-    data = create_dataset(conf, conf.transforms, show_progress=show_progress, name="train")
+    data = create_dataset(conf, show_progress=show_progress, name="train")
 
     sampler = None
     if isinstance(data, ExtendedWheatDataset):
@@ -171,7 +171,7 @@ def create_train_loader(conf, rank=None, num_replicas=None, mean=None, std=None)
 def create_val_loader(conf, rank=None, num_replicas=None, mean=None, std=None):
     # type: (DictConfig, Optional[int], Optional[int], Optional[float_3], Optional[float_3]) -> DataLoader
     show_progress = rank is None or rank == 0
-    data = create_dataset(conf, conf.transforms, show_progress=show_progress, name="val")
+    data = create_dataset(conf, show_progress=show_progress, name="val")
 
     sampler = None
     if num_replicas is not None:

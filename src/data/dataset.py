@@ -11,6 +11,10 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
+from .mosaic import build_mosaic
+
+Sample = Tuple[np.ndarray, Dict[str, np.ndarray]]
+
 
 log = logging.getLogger(__name__)
 
@@ -38,10 +42,10 @@ def read_bbox(bbox: str, bbox_format='pascal_voc') -> Tuple[int]:
 
     # 0 is a label
     if bbox_format == 'coco':
-        bb = tuple(bb + [0])
+        bb = tuple(bb)
     elif bbox_format == 'pascal_voc':
         x0, y0, w, h = bb
-        bb = (x0, y0, x0 + w, y0 + h, 0)
+        bb = (x0, y0, x0 + w, y0 + h)
     else:
         raise NotImplementedError(bbox_format)
 
@@ -85,12 +89,13 @@ def parse_bboxes(df, ids, show_progress=True):
     return bboxes, id_to_ordinal
 
 
-def _process(image, bboxes, transforms=None, box_format="xyxy"):
-    # type: (np.ndarray, np.ndarray, Optional[Transforms], Optional[str]) -> Tuple[Any, Dict[str, Any]]
+def _apply_transforms(image, bboxes, transforms=None):
+    # type: (np.ndarray, np.ndarray, Optional[Transforms]) -> Tuple[np.ndarray, np.ndarray, Tuple[int, int]]
     H0, W0 = image.shape[:2]
 
     if transforms is not None:
-        out = transforms(image=image, bboxes=bboxes)
+        cls = np.zeros(bboxes.shape[0], dtype=bboxes.dtype)
+        out = transforms(image=image, bboxes=bboxes, cls=cls)
         image, bboxes = out['image'], out['bboxes']
 
         if len(bboxes) > 0:
@@ -101,18 +106,7 @@ def _process(image, bboxes, transforms=None, box_format="xyxy"):
         image = torch.from_numpy(image)
         bboxes = torch.from_numpy(bboxes)[:, :4]
 
-    # we don't use ToTensor() pipe, so H, W, C -> C, H, W
-    image = image.transpose(2, 0, 1)
-
-    if box_format == "yxyx":
-        bboxes = bboxes[:, [1, 0, 3, 2]]
-
-    H1, W1 = image.shape[:2]
-    target = dict(bbox=bboxes,
-                  cls=np.array([1], dtype=np.int64),
-                  img_scale=min(H1 / H0, W1 / W0),
-                  img_size=(W0, H0))
-    return image, target
+    return image, bboxes, (H0, W0)
 
 
 def check_box_format(box_format: str) -> None:
@@ -139,7 +133,7 @@ class WheatDataset(Dataset):
         self.bboxes = parse_bboxes(df, ids, show_progress=show_progress)[0]
         assert len(self.bboxes) == len(self.images)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Sample:
         path = self.images[index]
         bboxes = self.bboxes[index]
 
@@ -150,19 +144,36 @@ class WheatDataset(Dataset):
             return self[index]
 
         image = cv2_imread(path)
-        return _process(image, bboxes, self.transforms, self.box_format)
+        image, bboxes, (H0, W0) = _apply_transforms(image, bboxes, self.transforms)
+
+        # we don't use ToTensor() pipe, so H, W, C -> C, H, W
+        image = image.transpose(2, 0, 1)
+
+        if self.box_format == "yxyx":
+            bboxes = bboxes[:, [1, 0, 3, 2]]
+
+        H1, W1 = image.shape[:2]
+        target = dict(bbox=bboxes,
+                      cls=np.array([1], dtype=np.int64),
+                      img_scale=min(H0 / H1, W0 / W1),
+                      img_size=(W0, H0))
+        return image, target
 
     def __len__(self):
         return len(self.images)
 
 
 class ExtendedWheatDataset(Dataset):
-    def __init__(self, image_dir, csv, gen_image_dirs=None, transforms=None, show_progress=True,
+    def __init__(self, image_dir, csv, gen_image_dirs=None, transforms=None, affine_tfm=None,
+                 affine_tfm_mosaic=None, p_mosaic=0.5, mosaic_num_orig=2, show_progress=True,
                  source=None, box_format="xyxy"):
-        # type: (str, str, Optional[Iterable[str]], Optional[Transforms], Optional[bool], Optional[DataSource], Optional[str]) -> None
         super(ExtendedWheatDataset, self).__init__()
         check_box_format(box_format)
         self.transforms = transforms
+        self.affine_tfm = affine_tfm
+        self.affine_tfm_mosaic = affine_tfm_mosaic
+        self.p_mosaic = p_mosaic
+        self.mosaic_num_orig = mosaic_num_orig
         self.box_format = box_format
 
         df = pd.read_csv(csv)
@@ -192,7 +203,56 @@ class ExtendedWheatDataset(Dataset):
                     path = os.path.join(img_dir, file)
                     self.images.append(path)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Sample:
+        H0, W0 = 1, 1
+
+        if np.random.rand() > self.p_mosaic:
+            image, bboxes = self._read_image_with_boxes(index)
+            image, bboxes, (H0, W0) = _apply_transforms(image, bboxes, self.transforms)
+            image, bboxes, _ = _apply_transforms(image, bboxes, self.affine_tfm)
+        else:
+            indices = self._sample_mosaic_indices(index, sample_orig=self.mosaic_num_orig)
+            samples = []
+
+            for idx in indices:
+                image, bboxes = self._read_image_with_boxes(idx)
+                image, bboxes, (H0, W0) = _apply_transforms(image, bboxes, self.transforms)
+                samples.append((image, bboxes))
+
+            H, W, C = samples[0][0].shape  # first image
+            affine = self.affine_tfm_mosaic or self.affine_tfm
+            image, bboxes = build_mosaic(samples, (H * 2, W * 2, C), box_yxyx=False)
+            image, bboxes, _ = _apply_transforms(image, bboxes, affine)
+
+        # we don't use ToTensor() pipe, so H, W, C -> C, H, W
+        image = image.transpose(2, 0, 1)
+
+        if self.box_format == "yxyx":
+            bboxes = bboxes[:, [1, 0, 3, 2]]
+
+        H1, W1 = image.shape[:2]
+        target = dict(bbox=bboxes,
+                      cls=np.array([1], dtype=np.int64),
+                      img_scale=min(H0 / H1, W0 / W1),
+                      img_size=(W0, H0))
+        return image, target
+
+    def _sample_mosaic_indices(self, index, sample_orig):
+        num_orig = self.num_orig_images
+        orig_indices = np.random.randint(0, num_orig, sample_orig)
+        gen_indices = np.random.randint(num_orig, len(self), 4 - sample_orig)
+
+        # use already sampled index
+        if index < num_orig and sample_orig > 0:
+            orig_indices[0] = index
+        elif index >= num_orig and sample_orig < 4:
+            gen_indices[0] = index
+
+        indices = np.concatenate([orig_indices, gen_indices])
+        indices = np.random.permutation(indices)
+        return indices
+
+    def _read_image_with_boxes(self, index):
         path = self.images[index]
 
         if index < len(self.bboxes):
@@ -205,9 +265,8 @@ class ExtendedWheatDataset(Dataset):
             index = np.random.randint(len(self))
             # Bad luck :) Lets make another dice roll...
             return self[index]
-
         image = cv2_imread(path)
-        return _process(image, bboxes, self.transforms, self.box_format)
+        return image, bboxes
 
     @staticmethod
     def _parse_image_id(filename: str) -> str:

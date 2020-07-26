@@ -1,9 +1,9 @@
 import numpy as np
-
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 int_2 = Tuple[int, int]
 int_3 = Tuple[int, int, int]
+ImageWithBoxes = Tuple[np.ndarray, np.ndarray]
 
 
 def mosaic_yxyx(mos_size: int_2, img_size: np.ndarray):
@@ -41,37 +41,26 @@ def mosaic_yxyx(mos_size: int_2, img_size: np.ndarray):
     return mos_yx, inp_yx, offset_yx
 
 
-def build_mosaic(shape: int_3, images: List[np.ndarray], targets: List[Dict[str, np.ndarray]],
-                 target_yxyx=False):
-    assert len(images) == 4
+def build_mosaic(samples: List[ImageWithBoxes], shape: int_3, box_yxyx=False) -> ImageWithBoxes:
+    assert len(samples) == 4
 
     H, W, C = shape
-    img_sizes = np.stack([img.shape[:2] for img in images])
+    img_sizes = np.stack([img.shape[:2] for img, tg in samples])
     mos_yx, img_yx, off_yx = mosaic_yxyx((H, W), img_sizes)
 
     mosaic = np.zeros(shape, dtype=np.uint8)
     mos_boxes = []
-    mos_cls = []
 
     for i in range(4):
-        image = images[i]
-        target = targets[i]
-        offset = off_yx[i]
-
-        if not target_yxyx:
-            offset = offset[::-1]
-
-        boxes = target['bbox'] + np.concatenate([offset] * 2)
-
+        image, boxes = samples[i]
         y0m, x0m, y1m, x1m = mos_yx[i]
         y0i, x0i, y1i, x1i = img_yx[i]
         mosaic[y0m:y1m, x0m:x1m] = image[y0i:y1i, x0i:x1i]
 
+        offset = off_yx[i]
+        if not box_yxyx:
+            offset = offset[::-1]
+        boxes = boxes + np.concatenate([offset] * 2)
         mos_boxes.append(boxes)
-        mos_cls.append(target['cls'])
 
-    mosaic_target = dict(
-        bbox=np.concatenate(mos_boxes),
-        cls=np.concatenate(mos_cls))
-
-    return mosaic, mosaic_target
+    return mosaic, np.concatenate(mos_boxes)
