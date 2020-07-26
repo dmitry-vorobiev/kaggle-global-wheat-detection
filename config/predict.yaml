@@ -39,4 +39,4 @@ model:
       pretrained_backbone: false
     bench_name: predict
     pretrained: false
-    checkpoint_path: ''
+    checkpoint_path: '/media/dmitry/data/weights/wheat/004/checkpoint_19950_ema.pth'

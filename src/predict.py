@@ -48,8 +48,13 @@ def create_data_loader(conf: DictConfig) -> DataLoader:
 
 def stringify(predictions):
     assert predictions.ndim == 2
-    predictions = predictions[:, [4, 0, 1, 2, 3]].reshape(-1).tolist()
-    return " ".join(map(str, predictions))
+    parts = []
+
+    for p in predictions:
+        parts.append(float(p[4]))  # score
+        parts += [int(round(c)) for c in p[:4].tolist()]
+
+    return " ".join(map(str, parts))
 
 
 @hydra.main(config_path="../config/predict.yaml")
@@ -87,6 +92,7 @@ def main(conf: DictConfig):
         img_size = torch.stack(metadata['img_size'], dim=1).to(dtype=torch.float, device=device)
 
         predictions = model(images, img_scales=img_scale, img_size=img_size)
+        predictions = predictions.cpu()
         assert len(image_ids) == len(predictions)
 
         for j, image_id in enumerate(image_ids):
