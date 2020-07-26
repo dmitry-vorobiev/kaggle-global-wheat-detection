@@ -53,11 +53,10 @@ def color_jitter(brightness_limit=0.2, contrast_limit=0.2, brightness_by_max=Tru
     ], p=p)
 
 
-def enhancer(clip_limit=4.0, tile_grid_size=(8, 8), blur_limit=7,
-             noise_var_limit=(10.0, 50.0), noise_mean=0, p=0.5):
+def enhancer(clip_limit=4.0, tile_grid_size=(8, 8), noise_var_limit=(10.0, 50.0),
+             noise_mean=0, p=0.5):
     return A.OneOf([
         A.CLAHE(clip_limit=clip_limit, tile_grid_size=as_tuple(tile_grid_size), p=1.0),
-        A.GaussianBlur(blur_limit=blur_limit, p=0.5),
         A.GaussNoise(var_limit=as_tuple(noise_var_limit), mean=noise_mean, p=1.0)
     ], p=p)
 

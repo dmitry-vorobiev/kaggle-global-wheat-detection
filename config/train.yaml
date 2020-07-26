@@ -70,7 +70,7 @@ data:
       enhance:
         class: data.transforms.enhancer
         params:
-          blur_limit: 5
+          noise_var_limit: [25.0, 60.0]
           p: 0.33
     affine_tfm:
       affine:
