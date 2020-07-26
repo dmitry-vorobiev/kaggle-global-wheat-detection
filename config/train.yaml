@@ -44,6 +44,13 @@ data:
       workers: 2
       prefetch: true
     transforms:
+      resize:
+        class: data.transforms.resize_or_crop
+        params:
+          height: 768
+          width: 768
+          # INTER_NEAREST, INTER_LINEAR, INTER_CUBIC, INTER_AREA
+          interpolation: [0, 1, 2, 3]
       flip:
         class: albumentations.Flip
         params:
@@ -80,13 +87,6 @@ data:
           interpolation: 2  # INTER_CUBIC
           border_mode: 0
           p: 0.33
-      resize:
-        class: data.transforms.resize_or_crop
-        params:
-          height: 768
-          width: 768
-          # INTER_NEAREST, INTER_LINEAR, INTER_CUBIC, INTER_AREA
-          interpolation: [0, 1, 2, 3]
     affine_tfm_mosaic:
       affine:
         class: data.transforms.affine
@@ -96,7 +96,7 @@ data:
           rotate_limit: 20
           interpolation: 2  # INTER_CUBIC
           border_mode: 0
-          p: 0.95
+          p: 0.9
       crop:
         class: albumentations.CenterCrop
         params:
