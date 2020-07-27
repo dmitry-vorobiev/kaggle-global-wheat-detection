@@ -70,7 +70,11 @@ def main(conf: DictConfig):
     make_dir(out_dir)
 
     dl = create_data_loader(conf.data)
+
     model = instantiate(conf.model).to(device)
+    assert conf.model.params.bench_name == "predict"
+    state_dict = torch.load(conf.model.weights)
+    model.model.load_state_dict(state_dict)
     model.eval()
     model.requires_grad_(False)
 
@@ -88,7 +92,7 @@ def main(conf: DictConfig):
         assert len(metadata['img_size']) == 2
         img_size = torch.stack(metadata['img_size'], dim=1).to(dtype=torch.float, device=device)
 
-        predictions = model(images, img_scales=img_scale, img_size=img_size)
+        predictions = model(images, img_scale, img_size)
         predictions = predictions.cpu()
         assert len(image_ids) == len(predictions)
 

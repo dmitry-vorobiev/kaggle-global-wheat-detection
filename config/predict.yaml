@@ -8,7 +8,7 @@ defaults:
 
 gpu: 1
 seed: ~
-min_score: 0.2
+min_score: 0.05
 
 out:
   dir: /media/dmitry/data/global-wheat-detection/prediction/${now:%Y-%m-%d}/${now:%H-%M-%S}
@@ -41,4 +41,4 @@ model:
     bench_name: predict
     pretrained: false
     pretrained_backbone: false
-    checkpoint_path: '/media/dmitry/data/weights/wheat/004/checkpoint_43890_ema.pth'
+  weights: '/media/dmitry/data/weights/wheat/004/checkpoint_43890_ema.pth'
