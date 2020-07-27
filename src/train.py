@@ -10,7 +10,6 @@ import time
 import torch
 import torchvision
 import torch.distributed as dist
-import torchvision.transforms as T
 
 from hydra.utils import instantiate
 from ignite.contrib.handlers import ProgressBar
@@ -283,7 +282,7 @@ def setup_ema(conf: DictConfig, model: nn.Module, device=None, master_node=False
                 for t_ema, t in states:
                     # filter out *.bn1.num_batches_tracked
                     if t.dtype != torch.int64:
-                        t = t.to(t_ema.device)
+                        t = t.to(dtype=t_ema.dtype, device=t_ema.device)
                         t_ema.lerp_(t, beta)
 
     return model_ema, _update
@@ -292,7 +291,7 @@ def setup_ema(conf: DictConfig, model: nn.Module, device=None, master_node=False
 def run(conf: DictConfig, local_rank=0, distributed=False):
     epochs = conf.train.epochs
     epoch_length = conf.train.epoch_length
-    torch.manual_seed(conf.general.seed)
+    torch.manual_seed(conf.seed)
 
     if distributed:
         rank = dist.get_rank()
@@ -301,7 +300,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     else:
         rank = 0
         num_replicas = 1
-        torch.cuda.set_device(conf.general.gpu)
+        torch.cuda.set_device(conf.gpu)
     device = torch.device('cuda')
     loader_args = dict(mean=conf.data.mean, std=conf.data.std)
     master_node = rank == 0
@@ -323,7 +322,14 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     optim = build_optimizer(conf.optim, model)
     lr_scheduler: Scheduler = instantiate(conf.lr_scheduler, optim)
 
-    to_save = dict(model=model, model_ema=model_ema, optim=optim)
+    use_amp = conf.use_amp
+    if use_amp:
+        from apex import amp
+        model, optim = amp.initialize(model, optim, **conf.amp)
+    else:
+        amp = None
+
+    to_save = dict(model=model, model_ema=model_ema, optim=optim, amp=amp)
 
     if master_node and conf.logging.model:
         logging.info(model)
@@ -345,16 +351,22 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         losses: Dict = model(*batch)
         stats = {k: v.item() for k, v in losses.items()}
         loss = losses["loss"]
-        loss.backward()
         del losses
+
+        if use_amp:
+            with amp.scale_loss(loss, optim) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            loss.backward()
 
         it = eng.state.iteration
         if not it % upd_interval:
             if clip_grad > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
+                params = amp.master_params(optim) if use_amp else model.parameters()
+                torch.nn.utils.clip_grad_norm_(params, clip_grad)
             optim.step()
             optim.zero_grad()
-            lr_scheduler.step_update(it // upd_interval)
+            lr_scheduler.step_update(it)
 
             if not it % ema_interval:
                 update_ema()
