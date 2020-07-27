@@ -375,13 +375,22 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         if calc_map:
             pred_boxes = pred_boxes.detach().cpu().numpy()
             true_boxes = targets['bbox'].cpu().numpy()
+            img_scale = targets['img_scale'].cpu().numpy()
+            # yxyx -> xyxy
+            true_boxes = true_boxes[:, :, [1, 0, 3, 2]]
+            # xyxy -> xywh
+            true_boxes[:, :, [2, 3]] -= true_boxes[:, :, [0, 1]]
+            # scale downsized boxes to match predictions on a full-sized image
+            true_boxes *= img_scale[:, None, None]
 
-            scores = [calculate_image_precision(true_boxes[i], pred_boxes[i, :, :4],
-                                                thresholds=IOU_THRESHOLDS,
-                                                form='coco')
-                      for i in range(len(images))]
-
+            scores = []
+            for i in range(len(images)):
+                s = calculate_image_precision(true_boxes[i], pred_boxes[i, :, :4],
+                                              thresholds=IOU_THRESHOLDS,
+                                              form='coco')
+                scores.append(s)
             stats['map'] = np.mean(scores)
+
         return stats
 
     train_metric_names = list(conf.logging.out.train)
