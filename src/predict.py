@@ -48,6 +48,7 @@ def create_data_loader(conf: DictConfig) -> DataLoader:
 
 def stringify(predictions):
     assert predictions.ndim == 2
+    assert predictions.size(1) == 6
     parts = []
 
     for p in predictions:
@@ -70,14 +71,10 @@ def main(conf: DictConfig):
 
     dl = create_data_loader(conf.data)
     model = instantiate(conf.model).to(device)
-
-    # weights = conf.model.weights
-    # logging.info("Loading weights from {}".format(weights))
-    # state_dict = torch.load(weights)
-    # model.load_state_dict(state_dict)
     model.eval()
     model.requires_grad_(False)
 
+    min_score = conf.get("min_score", -1)
     mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
     std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
 
@@ -96,8 +93,12 @@ def main(conf: DictConfig):
         assert len(image_ids) == len(predictions)
 
         for j, image_id in enumerate(image_ids):
+            # filter by min score
+            mask = predictions[j, :, 4] >= min_score
+            pred_i = predictions[j, mask]
+
             df.iloc[i_image, 0] = image_id
-            df.iloc[i_image, 1] = stringify(predictions[j])
+            df.iloc[i_image, 1] = stringify(pred_i)
             i_image += 1
 
     logging.info("Saving {} to {}".format(conf.out.file, out_dir))
