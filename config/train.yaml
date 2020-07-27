@@ -4,7 +4,7 @@ hydra:
 
 defaults:
   - model/effdet/base
-  - model: effdet/tf_d2
+  - model: effdet/tf_d3
 
 general:
   gpu: 1
@@ -23,32 +23,30 @@ data:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv
       gen_image_dirs:
+        - /media/dmitry/data/global-wheat-detection/synthetic/2020-07-19/15-13-08
         - /media/dmitry/data/global-wheat-detection/synthetic/0_20/2020-07-25/16-55-14
         - /media/dmitry/data/global-wheat-detection/synthetic/0_25/2020-07-25/18-13-32
         - /media/dmitry/data/global-wheat-detection/synthetic/0_30/2020-07-25/18-59-37
-        - /media/dmitry/data/global-wheat-detection/synthetic/0_35/2020-07-25/19-54-04
-        - /media/dmitry/data/global-wheat-detection/synthetic/0_40/2020-07-25/20-17-52
-        - /media/dmitry/data/global-wheat-detection/synthetic/0_45/2020-07-25/21-42-20
-      source: [ethz_1, arvalis_1, rres_1, arvalis_3]
+      source: ~
       show_progress: false
       box_format: yxyx
-      p_mosaic: 0.33
+      p_mosaic: 0.5
       mosaic_num_orig: 2
     bbox_params:
       format: pascal_voc
-      min_visibility: 0.15
+      min_visibility: 0.1
     orig_images_ratio: 0.5
     loader:
       # batch size per each device
       batch_size: 5
-      workers: 2
+      workers: 8
       prefetch: true
     transforms:
       resize:
         class: data.transforms.resize_or_crop
         params:
-          height: 768
-          width: 768
+          height: 896
+          width: 896
           # INTER_NEAREST, INTER_LINEAR, INTER_CUBIC, INTER_AREA
           interpolation: [0, 1, 2, 3]
       flip:
@@ -65,24 +63,24 @@ data:
           brightness_limit: 0.2
           contrast_limit: 0.2
           brightness_by_max: true
-          r_shift_limit: 20
-          g_shift_limit: 20
-          b_shift_limit: 20
-          hue_shift_limit: 15
-          sat_shift_limit: 30
-          val_shift_limit: 10
+          r_shift_limit: 30
+          g_shift_limit: 30
+          b_shift_limit: 30
+          hue_shift_limit: 20
+          sat_shift_limit: 50
+          val_shift_limit: 30
           p: 0.75
       enhance:
         class: data.transforms.enhancer
         params:
           noise_var_limit: [25.0, 60.0]
-          p: 0.33
+          p: 0.25
     affine_tfm:
       affine:
         class: data.transforms.affine
         params:
           shift_limit: 0
-          scale_limit: [0.05, 0.15]
+          scale_limit: [-0.05, 0.45]
           rotate_limit: 15
           interpolation: 2  # INTER_CUBIC
           border_mode: 0
@@ -92,7 +90,7 @@ data:
         class: data.transforms.affine
         params:
           shift_limit: 0.03
-          scale_limit: [-0.35, -0.1]
+          scale_limit: [-0.3, 0.15]
           rotate_limit: 20
           interpolation: 2  # INTER_CUBIC
           border_mode: 0
@@ -100,8 +98,8 @@ data:
       crop:
         class: albumentations.CenterCrop
         params:
-          height: 768
-          width: 768
+          height: 896
+          width: 896
   val:
     class: data.dataset.WheatDataset
     params:
@@ -121,8 +119,8 @@ data:
       resize:
         class: albumentations.Resize
         params:
-          height: 768
-          width: 768
+          height: 896
+          width: 896
           interpolation: 1  # INTER_LINEAR
 
 model:
@@ -144,9 +142,9 @@ optim:
     lr: 0.01  # max_lr = 0.016, batch_size = 128
     momentum: 0.9
     weight_decay: 4e-5
-    nesterov: false
+    nesterov: true
   clip_grad: 10.0
-  step_interval: 7 # * 5 = 35
+  step_interval: 5 # * 3 = 15
 
 lr_scheduler:
   # https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/cosine_lr.py
@@ -210,7 +208,6 @@ logging:
     train:
       - loss
       - box_loss
-      - class_loss
     val:
       - loss
       - box_loss
