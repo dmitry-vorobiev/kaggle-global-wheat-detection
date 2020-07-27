@@ -334,7 +334,6 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
     upd_interval = conf.optim.step_interval
     ema_interval = conf.smoothing.interval_it * upd_interval
-    calc_map = conf.validate.calc_map
     clip_grad = conf.optim.clip_grad
 
     _handle_batch_train = _build_process_batch_func(conf.data, stage="train", device=device)
@@ -362,12 +361,19 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
         return stats
 
+    calc_map = conf.validate.calc_map
+    min_score = conf.validate.get("min_score", -1)
+
+    model_val = model
+    if conf.train.skip and model_ema is not None:
+        model_val = model_ema.to(device)
+
     def _validate(eng: Engine, batch: Batch) -> FloatDict:
-        model.eval()
+        model_val.eval()
         images, targets = _handle_batch_val(batch)
 
         with torch.no_grad():
-            out: Dict = model(images, targets)
+            out: Dict = model_val(images, targets)
 
         pred_boxes = out.pop("detections")
         stats = {k: v.item() for k, v in out.items()}
@@ -385,7 +391,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
             scores = []
             for i in range(len(images)):
-                s = calculate_image_precision(true_boxes[i], pred_boxes[i, :, :4],
+                mask = pred_boxes[i, :, 4] >= min_score
+                s = calculate_image_precision(true_boxes[i], pred_boxes[i, mask, :4],
                                               thresholds=IOU_THRESHOLDS,
                                               form='coco')
                 scores.append(s)
