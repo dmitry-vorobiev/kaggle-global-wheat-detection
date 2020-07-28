@@ -491,7 +491,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         if master_node:
             logging.info("Resume from a checkpoint: {}".format(cp.load))
             trainer.add_event_handler(Events.STARTED, _upd_pbar_iter_from_cp, pbar)
-        Checkpoint.load_objects(to_load=to_save,
+        to_load = {k: v for k, v in to_save.items() if v is not None}
+        Checkpoint.load_objects(to_load=to_load,
                                 checkpoint=torch.load(cp.load, map_location=device))
         state = trainer.state
         # epoch counter start from 1

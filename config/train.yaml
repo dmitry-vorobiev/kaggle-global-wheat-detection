@@ -39,7 +39,7 @@ data:
       source: ~
       show_progress: false
       box_format: yxyx
-      p_mosaic: 0.5
+      p_mosaic: 0.25
       mosaic_num_orig: 2
     bbox_params:
       format: pascal_voc
@@ -48,7 +48,7 @@ data:
     loader:
       # batch size per each device
       batch_size: 4
-      workers: 8
+      workers: 1
       prefetch: true
     transforms:
       resize:
@@ -148,12 +148,12 @@ model:
 optim:
   class: torch.optim.SGD
   params:
-    lr: 0.01  # max_lr = 0.016, batch_size = 128
+    lr: 0.005  # max_lr = 0.016, batch_size = 128
     momentum: 0.9
     weight_decay: 4e-5
     nesterov: true
   clip_grad: 10.0
-  step_interval: 5 # * 3 = 15
+  step_interval: 4 # * 3 = 15
 
 lr_scheduler:
   # https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/cosine_lr.py
@@ -188,7 +188,7 @@ smoothing:
 
 train:
   skip: false
-  epochs: 100
+  epochs: 20
   epoch_length: -1
 
 validate:
@@ -204,7 +204,7 @@ visualize:
   interval_ep: 100
 
 checkpoints:
-  load: ~ #/media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_9630.pth
+  load: /media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_9630.pth
   save_dir: ~
   interval_ep: 1
   interval_it: 500
