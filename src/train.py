@@ -329,7 +329,9 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     else:
         amp = None
 
-    to_save = dict(model=model, model_ema=model_ema, optim=optim, amp=amp)
+    to_save = dict(model=model, model_ema=model_ema, optim=optim)
+    if use_amp:
+        to_save["amp"] = amp
 
     if master_node and conf.logging.model:
         logging.info(model)
