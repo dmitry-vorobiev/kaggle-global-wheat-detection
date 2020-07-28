@@ -309,7 +309,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         print(conf.pretty())
     if num_replicas > 1:
         epoch_length = epoch_length // num_replicas
-        loader_args = dict(rank=rank, num_replicas=num_replicas)
+        loader_args["rank"] = rank
+        loader_args["num_replicas"] = num_replicas
 
     train_dl = create_train_loader(conf.data.train, **loader_args)
     valid_dl = create_val_loader(conf.data.val, **loader_args)
@@ -322,12 +323,14 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     optim = build_optimizer(conf.optim, model)
     lr_scheduler: Scheduler = instantiate(conf.lr_scheduler, optim)
 
-    use_amp = conf.use_amp
-    if use_amp:
+    use_amp = False
+    if conf.use_apex:
+        import apex
         from apex import amp
         model, optim = amp.initialize(model, optim, **conf.amp)
+        use_amp = True
     else:
-        amp = None
+        apex, amp = None, None
 
     to_save = dict(model=model, model_ema=model_ema, optim=optim)
     if use_amp:
@@ -337,8 +340,12 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         logging.info(model)
 
     if distributed:
-        ddp_kwargs = dict(device_ids=[local_rank, ], output_device=local_rank)
-        model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
+        if apex is not None:
+            model = apex.parallel.distributed.DistributedDataParallel(
+                model, delay_allreduce=True)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(
+                model, device_ids=[local_rank, ], output_device=local_rank)
 
     upd_interval = conf.optim.step_interval
     ema_interval = conf.smoothing.interval_it * upd_interval
