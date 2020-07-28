@@ -8,8 +8,10 @@ defaults:
 
 gpu: 1
 seed: 333
+# use Nvidia's Apex package
 use_apex: true
 
+# params, which will be passed to amp.initialize(...)
 amp:
   opt_level: O1
   num_losses: 1
@@ -18,6 +20,8 @@ amp:
 distributed:
   backend: nccl
   url: env://
+  sync_bn: false
+  dist_bn: reduce
 
 data:
   mean: [0.485, 0.456, 0.406]

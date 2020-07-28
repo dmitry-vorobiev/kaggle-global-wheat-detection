@@ -327,8 +327,12 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     if conf.use_apex:
         import apex
         from apex import amp
+        logging.debug("Nvidia's Apex package is available")
+
         model, optim = amp.initialize(model, optim, **conf.amp)
         use_amp = True
+        if master_node:
+            logging.info("Using AMP with opt_level={}".format(conf.amp.opt_level))
     else:
         apex, amp = None, None
 
@@ -340,10 +344,15 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         logging.info(model)
 
     if distributed:
+        sync_bn = conf.distributed.sync_bn
         if apex is not None:
+            if sync_bn:
+                model = apex.parallel.convert_syncbn_model(model)
             model = apex.parallel.distributed.DistributedDataParallel(
                 model, delay_allreduce=True)
         else:
+            if sync_bn:
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             model = torch.nn.parallel.DistributedDataParallel(
                 model, device_ids=[local_rank, ], output_device=local_rank)
 
@@ -436,6 +445,18 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
     every_iteration = Events.ITERATION_COMPLETED
     trainer.add_event_handler(every_iteration, TerminateOnNan())
+
+    if distributed:
+        dist_bn = conf.distributed.dist_bn
+        if dist_bn in ["reduce", "broadcast"]:
+            from timm.utils import distribute_bn
+
+            @trainer.on(Events.EPOCH_COMPLETED)
+            def _distribute_bn_stats(eng: Engine):
+                reduce = dist_bn == "reduce"
+                if master_node:
+                    logging.info("Distributing BN stats...")
+                distribute_bn(model, num_replicas, reduce)
 
     sampler = train_dl.sampler
     if isinstance(sampler, (CustomSampler, DistributedSampler)):
