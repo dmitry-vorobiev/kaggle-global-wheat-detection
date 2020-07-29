@@ -39,7 +39,7 @@ data:
       source: ~
       show_progress: false
       box_format: yxyx
-      p_mosaic: 0.25
+      p_mosaic: 0.45
       mosaic_num_orig: 2
     bbox_params:
       format: pascal_voc
@@ -130,7 +130,7 @@ data:
         params:
           height: 896
           width: 896
-          interpolation: 1  # INTER_LINEAR
+          interpolation: 2  # INTER_CUBIC
 
 model:
   class: models.efficient_det.create_model_from_config
@@ -188,13 +188,13 @@ smoothing:
 
 train:
   skip: false
-  epochs: 20
+  epochs: 100
   epoch_length: -1
 
 validate:
   interval_ep: 100
   calc_map: true
-  min_score: 0.05
+  min_score: 0.1
 
 # Renders target and predicted bboxes on top of each image in the validation dataset.
 visualize:
@@ -204,7 +204,7 @@ visualize:
   interval_ep: 100
 
 checkpoints:
-  load: /media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_9630.pth
+  load: /media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_33720.pth
   save_dir: ~
   interval_ep: 1
   interval_it: 500
