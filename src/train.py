@@ -215,13 +215,13 @@ def setup_checkpoints(trainer, obj_to_save, epoch_length, conf):
             trainer.add_event_handler(save_event, make_checkpoint)
 
 
-def setup_visualizations(trainer, model, dl, device, conf):
-    # type: (Engine, nn.Module, DataLoader, Device, DictConfig) -> None
+def setup_visualizations(engine, model, dl, device, conf, force_run=True):
+    # type: (Engine, nn.Module, DataLoader, Device, DictConfig, Optional[bool]) -> None
     vis_conf = conf.visualize
     save_dir = vis_conf.get("save_dir", os.path.join(os.getcwd(), 'images'))
     min_score = vis_conf.get("min_score", -1)
     num_images = vis_conf.num_images
-    interval_ep = vis_conf.interval_ep
+    interval_ep = 1 if force_run else vis_conf.interval_ep
     target_yxyx = conf.data.train.params.box_format == 'yxyx'
     bs = dl.loader.batch_size if hasattr(dl, "loader") else dl.batch_size
 
@@ -235,11 +235,11 @@ def setup_visualizations(trainer, model, dl, device, conf):
     mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
     std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
 
-    @trainer.on(Events.EPOCH_COMPLETED(every=interval_ep))
+    @engine.on(Events.EPOCH_COMPLETED(every=interval_ep))
     def _make_visualizations(eng: Engine):
         iterations = int(math.ceil(num_images / bs))
         iterations = min(iterations, len(dl))
-        epoch = trainer.state.epoch
+        epoch = engine.state.epoch
 
         data = iter(dl)
         model.eval()
@@ -525,11 +525,13 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
             torch.cuda.synchronize(device)
         evaluator.run(valid_dl)
 
+    skip_train = conf.train.skip
     if master_node and conf.visualize.enabled:
-        setup_visualizations(trainer, model, valid_dl, device, conf)
+        vis_eng = evaluator if skip_train else trainer
+        setup_visualizations(vis_eng, model, valid_dl, device, conf, force_run=skip_train)
 
     try:
-        if conf.train.skip:
+        if skip_train:
             evaluator.run(valid_dl)
         else:
             trainer.run(train_dl, max_epochs=epochs, epoch_length=epoch_length)
