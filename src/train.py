@@ -8,7 +8,6 @@ import math
 import os
 import time
 import torch
-import torchvision
 import torch.distributed as dist
 
 from hydra.utils import instantiate
@@ -29,7 +28,7 @@ from data.dataset import ExtendedWheatDataset
 from data.sampler import CustomSampler
 from data.loader import fast_collate, PrefetchLoader
 from utils.typings import Batch, Device, FloatDict
-from utils.visualize import visualize_detections
+from utils.visualize import draw_bboxes, save_image
 
 Metrics = Dict[str, Metric]
 float_3 = Tuple[float, float, float]
@@ -218,7 +217,13 @@ def setup_checkpoints(trainer, obj_to_save, epoch_length, conf):
 
 def setup_visualizations(trainer, model, dl, device, conf):
     # type: (Engine, nn.Module, DataLoader, Device, DictConfig) -> None
-    save_dir = conf.get('save_dir', os.path.join(os.getcwd(), 'images'))
+    vis_conf = conf.visualize
+    save_dir = vis_conf.get("save_dir", os.path.join(os.getcwd(), 'images'))
+    min_score = vis_conf.get("min_score", -1)
+    num_images = vis_conf.num_images
+    interval_ep = vis_conf.interval_ep
+    target_yxyx = conf.data.train.params.box_format == 'yxyx'
+    bs = dl.loader.batch_size if hasattr(dl, "loader") else dl.batch_size
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -227,10 +232,12 @@ def setup_visualizations(trainer, model, dl, device, conf):
 
     logging.info("Saving visualizations to {}".format(save_dir))
 
-    @trainer.on(Events.EPOCH_COMPLETED(every=conf.interval_ep))
+    mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
+    std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
+
+    @trainer.on(Events.EPOCH_COMPLETED(every=interval_ep))
     def _make_visualizations(eng: Engine):
-        bs = dl.batch_size
-        iterations = int(math.ceil(conf.num_images / bs))
+        iterations = int(math.ceil(num_images / bs))
         iterations = min(iterations, len(dl))
         epoch = trainer.state.epoch
 
@@ -244,16 +251,29 @@ def setup_visualizations(trainer, model, dl, device, conf):
 
             with torch.no_grad():
                 out: Dict = model(images, targets)
+
             predictions = out["detections"]
+            predictions[:, :, :4] /= targets['img_scale'][:, None, None]
+            predictions = predictions.cpu().numpy()
+
+            target_boxes = targets['bbox'].cpu().numpy()
+
+            images = (images * std + mean).clamp(0, 255).permute(0, 2, 3, 1)
+            images = images.cpu().numpy().astype(np.uint8)
 
             done = i_batch * bs
-            to_do = min(conf.num_images - done, len(predictions))
+            to_do = min(num_images - done, len(predictions))
 
             for i in range(to_do):
                 image = images[i]
-                visualize_detections(image, targets['bbox'][i], predictions[i][:, :4])
+                scores_i = predictions[i, :, 4]
+                pred_i = predictions[i, scores_i >= min_score, :4]
+
+                draw_bboxes(image, target_boxes[i], (255, 0, 0), box_format='pascal_voc',
+                            yxyx=target_yxyx)
+                draw_bboxes(image, pred_i, (0, 255, 0), box_format='coco')
                 path = os.path.join(save_dir, '%02d_%03d.png' % (epoch, done + i))
-                torchvision.utils.save_image(image, path, normalize=True)
+                save_image(image, path)
                 del image
 
             del images, targets, predictions, out
@@ -506,7 +526,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         evaluator.run(valid_dl)
 
     if master_node and conf.visualize.enabled:
-        setup_visualizations(trainer, model, valid_dl, device, conf.visualize)
+        setup_visualizations(trainer, model, valid_dl, device, conf)
 
     try:
         if conf.train.skip:

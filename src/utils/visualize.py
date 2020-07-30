@@ -1,49 +1,21 @@
-import os
-import torch
-import torchvision
-
-from torch import Tensor
+import cv2
 
 
-IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
+def draw_bboxes(image, bboxes, color, box_format='coco', yxyx=False):
+    if yxyx:
+        bboxes = bboxes[:, [1, 0, 3, 2]]
+
+    for box in bboxes:
+        pt1 = tuple(box[:2])
+        if box_format == 'coco':
+            pt2 = tuple(box[:2] + box[2:])
+        elif box_format == 'pascal_voc':
+            pt2 = tuple(box[2:])
+        else:
+            raise AttributeError("Not supported: {}".format(box_format))
+        cv2.rectangle(image, pt1, pt2, color, 1)
 
 
-def draw_bbox(image: Tensor, bbox: Tensor, channel=0) -> None:
-    """Edits image inplace, draws red rectangle
-
-    Args:
-        image: tensor of shape (channels, height, width)
-        bbox: tensor of shape (x0, y0, x1, y1)
-        channel: which channel to use to color boxes
-    """
-    C, H, W = image.shape
-    bbox = bbox.to(torch.int64)
-    bbox[[0, 2]] = bbox[[0, 2]].clamp(0, W - 1)
-    bbox[[1, 3]] = bbox[[1, 3]].clamp(0, H - 1)
-    x0, y0, x1, y1 = list(map(int, bbox))
-
-    C_max = [image[i].max().item() for i in range(C)]
-    C_min = [image[i].min().item() for i in range(C)]
-
-    c = [max(1.0, C_max[i]) if channel == i else min(-1.0, C_min[i])
-         for i in range(C)]
-    c = torch.tensor(c)[:, None]
-
-    image[:, y0, x0:x1 + 1] = c
-    image[:, y1, x0:x1 + 1] = c
-    image[:, y0:y1 + 1, x0] = c
-    image[:, y0:y1 + 1, x1] = c
-
-
-def visualize_detections(image, targets, predictions) -> None:
-    for box in predictions:
-        draw_bbox(image, box, channel=0)
-
-    for box in targets:
-        draw_bbox(image, box, channel=1)
-
-    device = image.device
-    image *= torch.tensor(IMAGENET_DEFAULT_STD, device=device)[:, None, None]
-    image += torch.tensor(IMAGENET_DEFAULT_MEAN, device=device)[:, None, None]
-    return image.clamp(0, 1)
+def save_image(image, path):
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(path, image)

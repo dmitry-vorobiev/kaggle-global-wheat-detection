@@ -201,7 +201,8 @@ visualize:
   enabled: true
   save_dir: ~
   num_images: 32
-  interval_ep: 100
+  min_score: 0.1
+  interval_ep: 10
 
 checkpoints:
   load: /media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_33720.pth
