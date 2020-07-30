@@ -22,7 +22,6 @@ data:
   loader:
     batch_size: 3
     workers: 2
-    prefetch: false
   transforms: ~
   upsample:
     factor: 2

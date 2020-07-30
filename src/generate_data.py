@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 from tqdm import tqdm
 
-from data.loader import PrefetchLoader
 from data.no_labels import ImagesWithFileNames
 
 
@@ -43,25 +42,22 @@ def create_data_loader(conf: DictConfig, mean=None, std=None) -> DataLoader:
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
                         shuffle=False)
-    if conf.loader.prefetch:
-        loader = PrefetchLoader(loader, mean=conf.mean, std=conf.std, ignore_target=True)
     return loader
 
 
 def _build_process_batch_func(conf: DictConfig, device=None, dtype=torch.float):
-    prefetch = conf.loader.prefetch
     scale = conf.upsample.factor
     mode = conf.upsample.method
+
+    kwargs = dict(device=device, dtype=dtype)
+    mean = torch.tensor(list(conf.mean)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
+    std = torch.tensor(list(conf.std)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
 
     def _upsample(images):
         align_corners = None
         if mode in ["bilinear", "bicubic"]:
             align_corners = False
         return F.interpolate(images, scale_factor=scale, mode=mode, align_corners=align_corners)
-
-    kwargs = dict(device=device, dtype=dtype)
-    mean = torch.tensor(list(conf.mean)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
-    std = torch.tensor(list(conf.std)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
 
     def _handle(batch):
         images, files = batch
