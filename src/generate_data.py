@@ -48,7 +48,7 @@ def create_data_loader(conf: DictConfig, mean=None, std=None) -> DataLoader:
     return loader
 
 
-def _build_process_batch_func(conf: DictConfig, device=None):
+def _build_process_batch_func(conf: DictConfig, device=None, dtype=torch.float):
     prefetch = conf.loader.prefetch
     scale = conf.upsample.factor
     mode = conf.upsample.method
@@ -59,25 +59,16 @@ def _build_process_batch_func(conf: DictConfig, device=None):
             align_corners = False
         return F.interpolate(images, scale_factor=scale, mode=mode, align_corners=align_corners)
 
-    if prefetch and scale > 1:
-        def _handle(batch):
-            images, files = batch
-            return _upsample(images), files
+    kwargs = dict(device=device, dtype=dtype)
+    mean = torch.tensor(list(conf.mean)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
+    std = torch.tensor(list(conf.std)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
 
-    elif prefetch:
-        def _handle(batch):
-            return batch
-
-    else:
-        mean = torch.tensor(list(conf.mean)).to(device).view(1, 3, 1, 1).mul_(255)
-        std = torch.tensor(list(conf.std)).to(device).view(1, 3, 1, 1).mul_(255)
-
-        def _handle(batch):
-            images, files = batch
-            images = images.to(device).float().sub_(mean).div_(std)
-            if scale > 1:
-                images = _upsample(images)
-            return images, files
+    def _handle(batch):
+        images, files = batch
+        images = images.to(**kwargs).sub_(mean).div_(std)
+        if scale > 1:
+            images = _upsample(images)
+        return images, files
 
     return _handle
 
@@ -102,11 +93,15 @@ def _build_postproc_func(conf: DictConfig):
 
 @hydra.main(config_path="../config/generate_data.yaml")
 def main(conf: DictConfig):
+    torch.backends.cudnn.benchmark = True
+
     if 'seed' in conf and conf.seed:
         torch.manual_seed(conf.seed)
+    if 'gpu' in conf:
+        torch.cuda.set_device(conf.gpu)
 
-    torch.cuda.set_device(conf.gpu)
     device = torch.device('cuda')
+    dtype = torch.half if conf.fp16 else torch.float
     num_images = conf.out.num_images
 
     alpha = conf.model.alpha
@@ -120,14 +115,16 @@ def main(conf: DictConfig):
     logging.info("Saving {} images to {}".format(extension.upper(), out_dir))
 
     dl = create_data_loader(conf.data)
-    _handle_batch = _build_process_batch_func(conf.data, device=device)
+    _handle_batch = _build_process_batch_func(conf.data, device=device, dtype=dtype)
     _postproc = _build_postproc_func(conf.data)
 
-    model = instantiate(conf.model).to(device)
+    model = instantiate(conf.model)
+    model = model.to(device=device, dtype=dtype)
     weights = conf.model.weights
     logging.info("Loading weights from {}".format(weights))
     state_dict = torch.load(weights)
     model.load_state_dict(state_dict)
+    model.eval()
     model.requires_grad_(False)
 
     pbar = tqdm(desc="Generating images", total=num_images, unit=' img')
@@ -144,8 +141,9 @@ def main(conf: DictConfig):
             i_data += 1
 
         images, names = _handle_batch(batch)
+        batch[0] = None
         images = model(images, alpha=alpha)
-        images = _postproc(images)
+        images = _postproc(images).cpu().float()
 
         for image, name in zip(images, names):
             file = '{}_{}.{}'.format(name, i_data, extension)

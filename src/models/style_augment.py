@@ -114,13 +114,14 @@ class StyleAugmentNet(nn.Module):
         self.compute_style_std()
 
     def compute_style_std(self):
-        u, s, v = torch.svd(self.style_cov)
+        dtype = self.style_mean.dtype
+        u, s, v = torch.svd(self.style_cov.float())
         s = torch.sqrt(s)
-        self.style_std = (u @ s.diag()).T
+        self.style_std = (u @ s.diag()).to(dtype=dtype)
 
     def sample_style(self, batch_size: int, device=None):
         s = torch.randn(batch_size, self.style_dim, device=device)
-        s = torch.mm(s, self.style_std).add_(self.style_mean)
+        s = torch.mm(s, self.style_std.float()).add_(self.style_mean.float())
         return s
 
     @staticmethod
@@ -139,15 +140,15 @@ class StyleAugmentNet(nn.Module):
 
         if self.need_orig_style(alpha):
             x1 = F.interpolate(x, size=299, mode='bicubic', align_corners=False)
-            orig_style = self.style_encoder(x1)
+            orig_style = self.style_encoder(x1).float()
 
             if isinstance(alpha, tuple):
                 alpha = interval_to_tensor(N, alpha, device=device)
 
-            style.lerp_(orig_style, 1 - alpha)
+            style = style.lerp(orig_style, 1 - alpha)
             del x1, orig_style
 
-        x = self.transform(x, style)
+        x = self.transform(x, style.to(dtype=x.dtype))
         return x
 
     def load_state_dict(self, state_dict, strict=True):

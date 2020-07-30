@@ -4,6 +4,7 @@ hydra:
 
 gpu: 1
 seed: ~
+fp16: false
 
 out:
   num_images: 10266 # 3 times the original train length
@@ -19,15 +20,15 @@ data:
     csv: /media/dmitry/data/global-wheat-detection/train.csv
     source: ~
   loader:
-    batch_size: 1
+    batch_size: 3
     workers: 2
-    prefetch: true
+    prefetch: false
   transforms: ~
   upsample:
-    factor: 3
+    factor: 2
     method: bicubic
   downsample:
-    factor: 3
+    factor: 2
     method: area
 
 model:
