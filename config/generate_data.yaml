@@ -7,32 +7,33 @@ seed: ~
 
 out:
   num_images: 10266 # 3 times the original train length
-  dir: /media/dmitry/data/global-wheat-detection/synthetic/0_45/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  dir: /media/dmitry/data/global-wheat-detection/synthetic/0_20/${now:%Y-%m-%d}/${now:%H-%M-%S}
   ext: jpg
 
 data:
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
   # params is passed to the dataset class __init__
   params:
     image_dir: /media/dmitry/data/global-wheat-detection/train
     csv: /media/dmitry/data/global-wheat-detection/train.csv
     source: ~
   loader:
-    # batch size per each device
-    batch_size: 10
+    batch_size: 1
     workers: 2
-  transforms:
-    normalize:
-      class: albumentations.Normalize
-      params:
-        mean: [0.485, 0.456, 0.406]
-        std: [0.229, 0.224, 0.225]
-    to_torch:
-      class: albumentations.pytorch.transforms.ToTensorV2
+    prefetch: true
+  transforms: ~
+  upsample:
+    factor: 3
+    method: bicubic
+  downsample:
+    factor: 3
+    method: area
 
 model:
   class: models.style_augment.StyleAugmentNet
   params:
     img_channels: 3
     style_dim: 100
-  alpha: 0.45
+  alpha: 0.2
   weights: /media/dmitry/data/weights/style_augment_PBN_100.pth

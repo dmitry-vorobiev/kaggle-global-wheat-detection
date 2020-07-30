@@ -3,6 +3,7 @@ import hydra
 import logging
 import os
 import torch
+import torch.nn.functional as F
 import torchvision.transforms as T
 
 from hydra.utils import instantiate
@@ -11,6 +12,7 @@ from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 from tqdm import tqdm
 
+from data.loader import PrefetchLoader
 from data.no_labels import ImagesWithFileNames
 
 
@@ -21,24 +23,81 @@ def make_dir(dir_path: str) -> None:
         os.makedirs(dir_path)
 
 
-def create_dataset(conf: DictConfig, transforms: DictConfig) -> ImagesWithFileNames:
-    transforms = [instantiate(v) for k, v in transforms.items()]
-    compose = T.Compose
-    if all(isinstance(t, A.BasicTransform) for t in transforms):
-        compose = A.Compose
-    transforms = compose(transforms)
+def create_dataset(conf: DictConfig) -> ImagesWithFileNames:
+    transforms = None
+    if conf.transforms:
+        transforms = [instantiate(v) for k, v in conf.transforms.items()]
+        compose = T.Compose
+        if all(isinstance(t, A.BasicTransform) for t in transforms):
+            compose = A.Compose
+        transforms = compose(transforms)
+
     ds = ImagesWithFileNames(**conf.params, transforms=transforms)
     print("Found {} images".format(len(ds)))
     return ds
 
 
-def create_data_loader(conf: DictConfig) -> DataLoader:
-    data = create_dataset(conf, conf.transforms)
+def create_data_loader(conf: DictConfig, mean=None, std=None) -> DataLoader:
+    data = create_dataset(conf)
     loader = DataLoader(data,
                         batch_size=conf.loader.batch_size,
                         num_workers=conf.get('loader.workers', 0),
                         shuffle=False)
+    if conf.loader.prefetch:
+        loader = PrefetchLoader(loader, mean=conf.mean, std=conf.std, ignore_target=True)
     return loader
+
+
+def _build_process_batch_func(conf: DictConfig, device=None):
+    prefetch = conf.loader.prefetch
+    scale = conf.upsample.factor
+    mode = conf.upsample.method
+
+    def _upsample(images):
+        align_corners = None
+        if mode in ["bilinear", "bicubic"]:
+            align_corners = False
+        return F.interpolate(images, scale_factor=scale, mode=mode, align_corners=align_corners)
+
+    if prefetch and scale > 1:
+        def _handle(batch):
+            images, files = batch
+            return _upsample(images), files
+
+    elif prefetch:
+        def _handle(batch):
+            return batch
+
+    else:
+        mean = torch.tensor(list(conf.mean)).to(device).view(1, 3, 1, 1).mul_(255)
+        std = torch.tensor(list(conf.std)).to(device).view(1, 3, 1, 1).mul_(255)
+
+        def _handle(batch):
+            images, files = batch
+            images = images.to(device).float().sub_(mean).div_(std)
+            if scale > 1:
+                images = _upsample(images)
+            return images, files
+
+    return _handle
+
+
+def _build_postproc_func(conf: DictConfig):
+    scale = 1 / max(conf.downsample.factor, 1)
+    mode = conf.downsample.method
+
+    if scale < 1:
+        def _downsample(images):
+            align_corners = None
+            if mode in ["bilinear", "bicubic"]:
+                align_corners = False
+            return F.interpolate(images, scale_factor=scale, mode=mode,
+                                 align_corners=align_corners)
+    else:
+        def _downsample(images):
+            return images
+
+    return _downsample
 
 
 @hydra.main(config_path="../config/generate_data.yaml")
@@ -61,8 +120,10 @@ def main(conf: DictConfig):
     logging.info("Saving {} images to {}".format(extension.upper(), out_dir))
 
     dl = create_data_loader(conf.data)
-    model = instantiate(conf.model).to(device)
+    _handle_batch = _build_process_batch_func(conf.data, device=device)
+    _postproc = _build_postproc_func(conf.data)
 
+    model = instantiate(conf.model).to(device)
     weights = conf.model.weights
     logging.info("Loading weights from {}".format(weights))
     state_dict = torch.load(weights)
@@ -76,14 +137,15 @@ def main(conf: DictConfig):
 
     while i_img < num_images:
         try:
-            images, names = next(data)
+            batch = next(data)
         except StopIteration:
             data = iter(dl)
-            images, names = next(data)
+            batch = next(data)
             i_data += 1
 
-        images = images.to(device)
+        images, names = _handle_batch(batch)
         images = model(images, alpha=alpha)
+        images = _postproc(images)
 
         for image, name in zip(images, names):
             file = '{}_{}.{}'.format(name, i_data, extension)

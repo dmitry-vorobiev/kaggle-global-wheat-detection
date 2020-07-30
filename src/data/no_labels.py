@@ -52,11 +52,12 @@ class ImagesWithFileNames(Dataset):
         if self.transforms is not None:
             out = self.transforms(image=image)
             image = out['image']
-        else:
-            image = torch.from_numpy(image)
+
+        H1, W1 = image.shape[:2]
+        # we don't use ToTensor() pipe, so H, W, C -> C, H, W
+        image = image.transpose(2, 0, 1)
 
         if self.metadata:
-            H1, W1 = image.shape[:2]
             meta = dict(img_scale=min(H0 / H1, W0 / W1),
                         img_size=(W0, H0))
             return image, str(name), meta

@@ -87,7 +87,7 @@ def main(conf: DictConfig):
     i_image = 0
 
     for images, image_ids, metadata in tqdm(dl, desc="Predict"):
-        images = images.permute(0, 3, 1, 2).to(device).float().sub_(mean).div_(std)
+        images = images.to(device).float().sub_(mean).div_(std)
         img_scale = metadata['img_scale'].to(dtype=torch.float, device=device)
         assert len(metadata['img_size']) == 2
         img_size = torch.stack(metadata['img_size'], dim=1).to(dtype=torch.float, device=device)

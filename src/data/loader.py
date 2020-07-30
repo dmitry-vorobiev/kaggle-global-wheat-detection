@@ -68,10 +68,12 @@ class PrefetchLoader:
     def __init__(self,
             loader,
             mean=IMAGENET_DEFAULT_MEAN,
-            std=IMAGENET_DEFAULT_STD):
+            std=IMAGENET_DEFAULT_STD,
+            ignore_target=False):
         self.loader = loader
         self.mean = torch.tensor([x * 255 for x in mean]).cuda().view(1, 3, 1, 1)
         self.std = torch.tensor([x * 255 for x in std]).cuda().view(1, 3, 1, 1)
+        self.ignore_target = ignore_target
 
     def __iter__(self):
         stream = torch.cuda.Stream()
@@ -81,7 +83,8 @@ class PrefetchLoader:
             with torch.cuda.stream(stream):
                 next_input = next_input.cuda(non_blocking=True)
                 next_input = next_input.float().sub_(self.mean).div_(self.std)
-                next_target = {k: v.cuda(non_blocking=True) for k, v in next_target.items()}
+                if not self.ignore_target:
+                    next_target = {k: v.cuda(non_blocking=True) for k, v in next_target.items()}
 
             if not first:
                 yield input, target

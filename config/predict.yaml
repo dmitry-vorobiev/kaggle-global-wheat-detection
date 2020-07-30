@@ -41,4 +41,4 @@ model:
     bench_name: predict
     pretrained: false
     pretrained_backbone: false
-  weights: '/media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_33720_ema.pth'
+  weights: /media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_33720_ema.pth
