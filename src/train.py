@@ -40,6 +40,7 @@ def humanize_time(timestamp: float) -> str:
 
 def on_epoch_start(engine: Engine):
     engine.state.t0 = time.time()
+    engine.state.lr = 0.0
 
 
 def log_iter(engine, pbar, interval_it=100, name="stage"):
@@ -47,7 +48,8 @@ def log_iter(engine, pbar, interval_it=100, name="stage"):
     epoch = engine.state.epoch
     iteration = engine.state.iteration
     metrics = engine.state.metrics
-    stats = ", ".join(["%s: %.3f" % k_v for k_v in metrics.items()])
+    stats = ", ".join(["%s: %.4f" % k_v for k_v in metrics.items()])
+    stats += ", lr: %.4f" % engine.state.lr
     t0 = engine.state.t0
     t1 = time.time()
     it_time = (t1 - t0) / interval_it
@@ -341,7 +343,11 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     model = instantiate(conf.model).to(device)
     model_ema, update_ema = setup_ema(conf, model, device=device, master_node=master_node)
     optim = build_optimizer(conf.optim, model)
-    lr_scheduler: Scheduler = instantiate(conf.lr_scheduler, optim)
+
+    scheduler_kwargs = dict()
+    if "schedule.OneCyclePolicy" in conf.lr_scheduler["class"]:
+        scheduler_kwargs["cycle_steps"] = epoch_length
+    lr_scheduler: Scheduler = instantiate(conf.lr_scheduler, optim, **scheduler_kwargs)
 
     use_amp = False
     if conf.use_apex:
@@ -408,6 +414,8 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
 
             if not it % ema_interval:
                 update_ema()
+
+            eng.state.lr = optim.param_groups[0]["lr"]
 
         return stats
 

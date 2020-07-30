@@ -1,0 +1,7 @@
+optim:
+  class: torch.optim.SGD
+  params:
+    lr: 0.005  # max_lr = 0.016, batch_size = 128
+    momentum: 0.9
+    weight_decay: 4e-5
+    nesterov: true

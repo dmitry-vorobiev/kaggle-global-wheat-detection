@@ -1,0 +1,7 @@
+optim:
+  class: torch.optim.AdamW
+  params:
+    lr: 0.001
+    betas: [0.9, 0.999]
+    weight_decay: 1e-4
+    eps: 1e-8

@@ -5,6 +5,10 @@ hydra:
 defaults:
   - model/effdet/base
   - model: effdet/tf_d3
+  - optim: sgd
+  - scheduler: cosine
+#  - optim: adamw
+#  - scheduler: one_cycle
 
 gpu: 1
 seed: 333
@@ -205,7 +209,7 @@ visualize:
   interval_ep: 10
 
 checkpoints:
-  load: /media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_33720.pth
+  load: ~
   save_dir: ~
   interval_ep: 1
   interval_it: 500
