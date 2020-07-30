@@ -89,6 +89,19 @@ def parse_bboxes(df, ids, show_progress=True):
     return bboxes, id_to_ordinal
 
 
+def extract_bboxes(df, ids):
+    # type: (pd.DataFrame, Iterable[str]) -> Tuple[List[str], Dict[str, int]]
+    id_to_ordinal = dict()
+    bboxes = []
+    for i, image_id in enumerate(ids):
+        image_bb = df.loc[df['image_id'] == image_id, 'bbox']
+        id_to_ordinal[image_id] = i
+        bboxes.append(image_bb)
+
+    assert len(bboxes) == len(id_to_ordinal)
+    return bboxes, id_to_ordinal
+
+
 def _apply_transforms(image, bboxes, transforms=None):
     # type: (np.ndarray, np.ndarray, Optional[Transforms]) -> Tuple[np.ndarray, np.ndarray, Tuple[int, int]]
     H0, W0 = image.shape[:2]
@@ -116,12 +129,13 @@ def check_box_format(box_format: str) -> None:
 
 class WheatDataset(Dataset):
     def __init__(self, image_dir, csv, transforms=None, show_progress=True, source=None,
-                 box_format="xyxy"):
-        # type: (str, str, Optional[Transforms], Optional[bool], Optional[DataSource], Optional[str]) -> None
+                 box_format="xyxy", box_lazy=True):
+        # type: (str, str, Optional[Transforms], Optional[bool], Optional[DataSource], Optional[str], Optional[bool]) -> None
         super(WheatDataset, self).__init__()
         check_box_format(box_format)
         self.transforms = transforms
         self.box_format = box_format
+        self.box_lazy = box_lazy
 
         df = pd.read_csv(csv)
         if source is not None:
@@ -130,7 +144,10 @@ class WheatDataset(Dataset):
 
         files = map(lambda x: x + '.jpg', ids)
         self.images = make_dataset(image_dir, files)
-        self.bboxes = parse_bboxes(df, ids, show_progress=show_progress)[0]
+        if box_lazy:
+            self.bboxes = extract_bboxes(df, ids)[0]
+        else:
+            self.bboxes = parse_bboxes(df, ids, show_progress=show_progress)[0]
         assert len(self.bboxes) == len(self.images)
 
     def __getitem__(self, index: int) -> Sample:
@@ -144,6 +161,8 @@ class WheatDataset(Dataset):
             return self[index]
 
         image = cv2_imread(path)
+        if self.box_lazy:
+            bboxes = np.stack(list(map(bbox_str_to_numpy, bboxes)))
         image, bboxes, (H0, W0) = _apply_transforms(image, bboxes, self.transforms)
 
         # we don't use ToTensor() pipe, so H, W, C -> C, H, W
@@ -166,7 +185,7 @@ class WheatDataset(Dataset):
 class ExtendedWheatDataset(Dataset):
     def __init__(self, image_dir, csv, gen_image_dirs=None, transforms=None, affine_tfm=None,
                  affine_tfm_mosaic=None, p_mosaic=0.5, mosaic_num_orig=2, show_progress=True,
-                 source=None, box_format="xyxy"):
+                 source=None, box_format="xyxy", box_lazy=True):
         super(ExtendedWheatDataset, self).__init__()
         check_box_format(box_format)
         self.transforms = transforms
@@ -175,6 +194,7 @@ class ExtendedWheatDataset(Dataset):
         self.p_mosaic = p_mosaic
         self.mosaic_num_orig = mosaic_num_orig
         self.box_format = box_format
+        self.box_lazy = box_lazy
 
         df = pd.read_csv(csv)
         if source is not None:
@@ -187,7 +207,10 @@ class ExtendedWheatDataset(Dataset):
         if gen_image_dirs is not None:
             self._add_gen_images(gen_image_dirs, ids)
 
-        self.bboxes, self.id_to_ordinal = parse_bboxes(df, ids, show_progress=show_progress)
+        if box_lazy:
+            self.bboxes, self.id_to_ordinal = extract_bboxes(df, ids)
+        else:
+            self.bboxes, self.id_to_ordinal = parse_bboxes(df, ids, show_progress=show_progress)
         assert self.num_orig_images == len(self.bboxes)
 
     def _add_gen_images(self, dirs: Iterable[str], ids: Union[np.ndarray, Iterable[str]]):
@@ -266,6 +289,8 @@ class ExtendedWheatDataset(Dataset):
             # Bad luck :) Lets make another dice roll...
             return self[index]
         image = cv2_imread(path)
+        if self.box_lazy:
+            bboxes = np.stack(list(map(bbox_str_to_numpy, bboxes)))
         return image, bboxes
 
     @staticmethod

@@ -38,9 +38,10 @@ data:
         - /media/dmitry/data/global-wheat-detection/synthetic/0_30/2020-07-25/18-59-37
       source: ~
       show_progress: false
-      box_format: yxyx
       p_mosaic: 0.45
       mosaic_num_orig: 2
+      box_format: yxyx
+      box_lazy: true
     bbox_params:
       format: pascal_voc
       min_visibility: 0.1
@@ -117,6 +118,7 @@ data:
       source: [usask_1, arvalis_2, inrae_1]
       show_progress: false
       box_format: yxyx
+      box_lazy: true
     bbox_params:
       format: pascal_voc
       min_visibility: 0.05
