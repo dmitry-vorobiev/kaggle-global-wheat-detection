@@ -55,4 +55,4 @@ model:
 
       # localization loss (used by train bench)
       delta: 0.1
-      box_loss_weight: 50.0
+      # box_loss_weight: 50.0

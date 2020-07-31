@@ -50,8 +50,8 @@ def _build_process_batch_func(conf: DictConfig, device=None, dtype=torch.float):
     mode = conf.upsample.method
 
     kwargs = dict(device=device, dtype=dtype)
-    mean = torch.tensor(list(conf.mean)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
-    std = torch.tensor(list(conf.std)).to(**kwargs).view(1, 3, 1, 1).mul_(255)
+    mean = torch.tensor(list(conf.mean)).mul_(255).view(1, 3, 1, 1).to(**kwargs)
+    std = torch.tensor(list(conf.std)).mul_(255).view(1, 3, 1, 1).to(**kwargs)
 
     def _upsample(images):
         align_corners = None

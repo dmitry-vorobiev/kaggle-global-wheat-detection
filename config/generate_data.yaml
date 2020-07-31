@@ -8,7 +8,7 @@ fp16: false
 
 out:
   num_images: 10266 # 3 times the original train length
-  dir: /media/dmitry/data/global-wheat-detection/synthetic/0_30_x2/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  dir: /media/dmitry/data/global-wheat-detection/synthetic/0_225_x2/${now:%Y-%m-%d}/${now:%H-%M-%S}
   ext: jpg
 
 data:
@@ -35,5 +35,5 @@ model:
   params:
     img_channels: 3
     style_dim: 100
-  alpha: 0.30
+  alpha: 0.225
   weights: /media/dmitry/data/weights/style_augment_PBN_100.pth

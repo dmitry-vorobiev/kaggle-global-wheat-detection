@@ -22,6 +22,8 @@ import copy
 from effdet import DetBenchTrain, DetBenchPredict, EfficientDet, load_checkpoint, load_pretrained
 from effdet.efficientdet import HeadNet
 
+from loss.efficient_det import DetectionLoss
+
 
 def create_model_from_config(config, bench_name='', pretrained=False, checkpoint_path='', **kwargs):
     model = EfficientDet(config, **kwargs)
@@ -41,6 +43,7 @@ def create_model_from_config(config, bench_name='', pretrained=False, checkpoint
     # wrap model in task specific bench if set
     if bench_name == 'train':
         model = DetBenchTrain(model, config)
+        model.loss_fn = DetectionLoss(config)
     elif bench_name == 'predict':
         model = DetBenchPredict(model, config)
     return model

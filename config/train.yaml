@@ -5,10 +5,10 @@ hydra:
 defaults:
   - model/effdet/base
   - model: effdet/tf_d3
-  - optim: sgd
-  - scheduler: cosine
-#  - optim: adamw
-#  - scheduler: one_cycle
+  - optim: adamw
+  - scheduler: one_cycle
+#  - optim: sgd
+#  - scheduler: cosine
 
 gpu: 1
 seed: 333
@@ -36,10 +36,12 @@ data:
       image_dir: /media/dmitry/data/global-wheat-detection/train
       csv: /media/dmitry/data/global-wheat-detection/train.csv
       gen_image_dirs:
-        - /media/dmitry/data/global-wheat-detection/synthetic/2020-07-19/15-13-08
-        - /media/dmitry/data/global-wheat-detection/synthetic/0_20/2020-07-25/16-55-14
-        - /media/dmitry/data/global-wheat-detection/synthetic/0_25/2020-07-25/18-13-32
-        - /media/dmitry/data/global-wheat-detection/synthetic/0_30/2020-07-25/18-59-37
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_20_x2/2020-07-30/11-52-23
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_225_x2/2020-07-31/12-12-11
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_25_x2/2020-07-30/12-55-50
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_275_x2/2020-07-30/20-45-00
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_30_x2/2020-07-30/15-01-01
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_325_x2/2020-07-31/10-54-53
       source: ~
       show_progress: false
       p_mosaic: 0.45
@@ -142,46 +144,15 @@ model:
     config:
       num_classes: 90  # to load pretrained weights
       pretrained_backbone: false
+      box_loss: ciou
+      box_loss_weight: 10.0
     bench_name: train
     pretrained: true
     checkpoint_path: ''
 
-# loss inside DetTrainBench
-# TODO: maybe add option for alternative losses
-
 optim:
-  class: torch.optim.SGD
-  params:
-    lr: 0.005  # max_lr = 0.016, batch_size = 128
-    momentum: 0.9
-    weight_decay: 4e-5
-    nesterov: true
   clip_grad: 10.0
-  step_interval: 4 # * 3 = 15
-
-lr_scheduler:
-  # https://github.com/rwightman/pytorch-image-models/blob/master/timm/scheduler/cosine_lr.py
-  # https://github.com/rwightman/efficientdet-pytorch/blob/master/train.py
-  class: timm.scheduler.cosine_lr.CosineLRScheduler
-  params:
-    # num epochs per cycle
-    t_initial: 10
-    # cycle len multiplier
-    t_mul: 1.0
-    # lower lr bound for cyclic schedulers that hit 0
-    lr_min: 1e-5
-    # LR decay rate
-    decay_rate: 0.9
-    warmup_lr_init: 1e-4
-    # epochs to warmup LR
-    warmup_t: 2
-    # learning rate cycle limit
-    cycle_limit: 0
-    t_in_epochs: true
-    noise_range_t: ~
-    noise_pct: 0.67
-    noise_std: 1.0
-    noise_seed: 333
+  step_interval: 4 # bs = 4 * 2 gpus; eff_bs = 32
 
 # EMA of the model weights, alpha - decay rate
 smoothing:
