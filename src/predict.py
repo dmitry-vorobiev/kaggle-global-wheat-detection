@@ -60,6 +60,8 @@ def stringify(predictions):
 
 @hydra.main(config_path="../config/predict.yaml")
 def main(conf: DictConfig):
+    print(conf.pretty())
+
     if 'seed' in conf and conf.seed:
         torch.manual_seed(conf.seed)
 
@@ -92,8 +94,8 @@ def main(conf: DictConfig):
         assert len(metadata['img_size']) == 2
         img_size = torch.stack(metadata['img_size'], dim=1).to(dtype=torch.float, device=device)
 
-        predictions = model(images, img_scale, img_size)
-        predictions = predictions.cpu()
+        predictions = model(images, img_scale, img_size).cpu()
+        del images, img_scale, img_size
         assert len(image_ids) == len(predictions)
 
         for j, image_id in enumerate(image_ids):
@@ -104,6 +106,8 @@ def main(conf: DictConfig):
             df.iloc[i_image, 0] = image_id
             df.iloc[i_image, 1] = stringify(pred_i)
             i_image += 1
+
+        predictions = None
 
     logging.info("Saving {} to {}".format(conf.out.file, out_dir))
     path = os.path.join(out_dir, conf.out.file)

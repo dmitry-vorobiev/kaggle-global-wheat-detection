@@ -4,11 +4,11 @@ hydra:
 
 defaults:
   - model/effdet/base
-  - model: effdet/tf_d3
+  - model: effdet/tf_d2
 
 gpu: 1
 seed: ~
-min_score: 0.08
+min_score: 0.06
 
 out:
   dir: /media/dmitry/data/global-wheat-detection/prediction/${now:%Y-%m-%d}/${now:%H-%M-%S}
@@ -22,14 +22,14 @@ data:
     image_dir: /media/dmitry/data/global-wheat-detection/test
     metadata: true
   loader:
-    batch_size: 16
+    batch_size: 10
     workers: 2
   transforms:
     resize:
       class: albumentations.Resize
       params:
-        height: 896
-        width: 896
+        height: 1024
+        width: 1024
         interpolation: 2  # INTER_CUBIC
 
 model:
@@ -41,4 +41,4 @@ model:
     bench_name: predict
     pretrained: false
     pretrained_backbone: false
-  weights: /media/dmitry/data/weights/wheat/005_d3_amp/checkpoint_33720_ema.pth
+  weights: /media/dmitry/data/weights/wheat/igor_001/checkpoint_4220_ema.pth
