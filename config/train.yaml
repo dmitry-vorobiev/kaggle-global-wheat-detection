@@ -5,9 +5,8 @@ hydra:
 defaults:
   - model/effdet/base
   - model: effdet/tf_d3
-  - optim: adamw
+  - optim: sgd
   - scheduler: one_cycle
-#  - optim: sgd
 #  - scheduler: cosine
 
 gpu: 1
@@ -62,8 +61,8 @@ data:
         params:
           height: 896
           width: 896
-          # INTER_NEAREST, INTER_LINEAR, INTER_CUBIC, INTER_AREA
-          interpolation: [0, 1, 2, 3]
+          # INTER_CUBIC, INTER_AREA
+          interpolation: [2, 3]
       flip:
         class: albumentations.Flip
         params:
@@ -151,6 +150,8 @@ model:
     checkpoint_path: ''
 
 optim:
+  params:
+    lr: 0.004
   clip_grad: 10.0
   step_interval: 4 # bs = 4 * 2 gpus; eff_bs = 32
 
@@ -158,7 +159,7 @@ optim:
 smoothing:
   enabled: true
   use_cpu: true
-  alpha: 0.998
+  alpha: 0.995
   interval_it: 1
 
 train:

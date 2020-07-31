@@ -31,4 +31,4 @@ model:
       box_class_repeats: 4
       pad_type: same
       redundant_bias: true
-      url: https://github.com/rwightman/efficientdet-pytorch/releases/download/v0.1/tf_efficientdet_d3-b0ea2cbc.pth
+      url: https://github.com/rwightman/efficientdet-pytorch/releases/download/v0.1/tf_efficientdet_d3_47-0b525f35.pth
