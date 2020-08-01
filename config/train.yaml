@@ -144,7 +144,7 @@ model:
       num_classes: 90  # to load pretrained weights
       pretrained_backbone: false
       box_loss: ciou
-      box_loss_weight: 10.0
+      box_loss_weight: 50.0
     bench_name: train
     pretrained: true
     checkpoint_path: ''
@@ -186,6 +186,7 @@ checkpoints:
   interval_ep: 1
   interval_it: 500
   max_checkpoints: 100
+  drop_state: ~
 
 logging:
   model: false

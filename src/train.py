@@ -362,9 +362,11 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
     else:
         apex, amp = None, None
 
-    to_save = dict(model=model, model_ema=model_ema, optim=optim)
+    to_save = dict(model=model, optim=optim)
     if use_amp:
         to_save["amp"] = amp
+    if model_ema is not None:
+        to_save["model_ema"] = model_ema
 
     if master_node and conf.logging.model:
         logging.info(model)
@@ -520,6 +522,10 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
             logging.info("Resume from a checkpoint: {}".format(cp.load))
             trainer.add_event_handler(Events.STARTED, _upd_pbar_iter_from_cp, pbar)
         to_load = {k: v for k, v in to_save.items() if v is not None}
+        if cp.drop_state:
+            # we might want to swap optimizer or to reset it state
+            drop_keys = set(cp.drop_state)
+            to_load = {k: v for k, v in to_load.items() if k not in drop_keys}
         Checkpoint.load_objects(to_load=to_load,
                                 checkpoint=torch.load(cp.load, map_location=device))
         state = trainer.state
