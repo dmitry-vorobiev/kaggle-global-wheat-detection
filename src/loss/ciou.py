@@ -17,50 +17,52 @@ def ciou(box_a: Tensor, box_b: Tensor, eps=1e-8):
     if box_a.size(0) < 1:
         return torch.zeros(0)
 
-    # Normalize?
-    box_a = torch.sigmoid(box_a)
-    box_b = torch.sigmoid(box_b)
+    hw_a = box_a[:, [2, 3]] - box_a[:, [0, 1]]
+    hw_a = torch.sigmoid(hw_a).exp()
 
-    # Expecting yxyx format, but might work for xyxy (not tested)
-    H_a = torch.exp(box_a[:, 2] - box_a[:, 0])  # y1 - y0
-    W_a = torch.exp(box_a[:, 3] - box_a[:, 1])  # x1 - x0
-    H_b = torch.exp(box_b[:, 2] - box_b[:, 0])
-    W_b = torch.exp(box_b[:, 3] - box_b[:, 1])
+    hw_b = box_b[:, [2, 3]] - box_b[:, [0, 1]]
+    hw_b = torch.sigmoid(hw_b).exp()
 
-    # Center points
-    yc_a = box_a[:, 0] + H_a / 2  # y0 + h/2
-    xc_a = box_a[:, 1] + W_a / 2  # x0 + w/2
-    yc_b = box_b[:, 0] + H_b / 2
-    xc_b = box_b[:, 1] + W_b / 2
+    # Center points (y,x)
+    c_a = (box_a[:, [0, 1]] + box_a[:, [2, 3]]) / 2
+    c_a = torch.sigmoid(c_a)
+
+    c_b = (box_b[:, [0, 1]] + box_b[:, [2, 3]]) / 2
+    c_b = torch.sigmoid(c_b)
+
+    yx0_a = c_a - hw_a / 2
+    yx1_a = c_a + hw_a / 2
+    yx0_b = c_b - hw_b / 2
+    yx1_b = c_b + hw_b / 2
 
     # Intersection
-    inter_yx0 = torch.max(box_a[:, [0, 1]], box_b[:, [0, 1]])
-    inter_yx1 = torch.min(box_a[:, [2, 3]], box_b[:, [2, 3]])
-    H_i = torch.clamp_min(inter_yx1[:, 0] - inter_yx0[:, 0], 0)
-    W_i = torch.clamp_min(inter_yx1[:, 1] - inter_yx0[:, 1], 0)
+    inter_yx0 = torch.max(yx0_a, yx0_b)
+    inter_yx1 = torch.min(yx1_a, yx1_b)
+    inter_hw = torch.clamp_min(inter_yx1 - inter_yx0, 0)
 
-    inter_area = W_i * H_i
-    union_area = (W_a * H_a) + (W_b * H_b) - inter_area
+    area_a = hw_a[:, 0] * hw_a[:, 1]
+    area_b = hw_b[:, 0] * hw_b[:, 1]
+    inter_area = inter_hw[:, 0] * inter_hw[:, 1]
+    union_area = area_a + area_b - inter_area
     iou = inter_area / (union_area + eps)
 
     # Enclosing box
-    clos_yx0 = torch.min(box_a[:, [0, 1]], box_b[:, [0, 1]])
-    clos_yx1 = torch.max(box_a[:, [2, 3]], box_b[:, [2, 3]])
-    H_c = torch.clamp_min(clos_yx1[:, 0] - clos_yx0[:, 0], 0)
-    W_c = torch.clamp_min(clos_yx1[:, 1] - clos_yx0[:, 1], 0)
+    clos_yx0 = torch.min(yx0_a, yx0_b)
+    clos_yx1 = torch.max(yx1_a, yx1_b)
+    clos_hw = torch.clamp_min(clos_yx1 - clos_yx0, 0)
 
     # Distance term
-    clos_diag = torch.pow(H_c, 2) + torch.pow(W_c, 2)
-    inter_diag = torch.pow(yc_b - yc_a, 2) + torch.pow(xc_b - xc_a, 2)
+    clos_diag = torch.pow(clos_hw, 2).sum(dim=1)
+    inter_diag = torch.pow(c_b - c_a, 2).sum(dim=1)
     u = inter_diag / (clos_diag + eps)
 
     # Shape consistency term
-    v = torch.atan(W_b / H_b) - torch.atan(W_a / H_a)
+    v = torch.atan(hw_a[:, 0] / hw_a[:, 1]) - torch.atan(hw_b[:, 0] / hw_b[:, 1])
     v = (4 / math.pi ** 2) * torch.pow(v, 2)
 
     with torch.no_grad():
-        s = (iou > 0.5).to(dtype=iou.dtype)
-        alpha = s * v / ((1 + eps) - iou + v)
+        s = iou > 0.5
+        alpha = s * v / ((1 - iou + v) + eps)
 
     ciou = iou - u - alpha * v
     return torch.clamp(ciou, -1, 1)
