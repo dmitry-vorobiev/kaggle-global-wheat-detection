@@ -11,6 +11,9 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+from utils.common import mean_std_tensors
+from utils.visualize import draw_bboxes, save_image
+
 
 def make_dir(dir_path: str) -> None:
     if os.path.isfile(dir_path) or os.path.splitext(dir_path)[-1]:
@@ -48,7 +51,7 @@ def create_data_loader(conf: DictConfig) -> DataLoader:
 
 def stringify(predictions):
     assert predictions.ndim == 2
-    assert predictions.size(1) == 6
+    assert predictions.shape[1] == 6
     parts = []
 
     for p in predictions:
@@ -80,13 +83,22 @@ def main(conf: DictConfig):
     model.eval()
     model.requires_grad_(False)
 
+    num_images_to_save = conf.out.num_images
+    image_dir = conf.out.get('image_dir', os.path.join(os.getcwd(), 'images'))
+    save_images = num_images_to_save > 0
+    if save_images:
+        if not os.path.isabs(image_dir):
+            image_dir = os.path.join(out_dir, image_dir)
+            make_dir(image_dir)
+        logging.info("Saving images to {}".format(image_dir))
+
     min_score = conf.get("min_score", -1)
-    mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
-    std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
+    mean, std = mean_std_tensors(conf.data, device)
 
     files = os.listdir(conf.data.params.image_dir)
     df = pd.DataFrame(np.empty((len(files), 2)), columns=["image_id", "PredictionString"])
     i_image = 0
+    s_image = 0
 
     for images, image_ids, metadata in tqdm(dl, desc="Predict"):
         images = images.to(device).float().sub_(mean).div_(std)
@@ -95,19 +107,34 @@ def main(conf: DictConfig):
         img_size = torch.stack(metadata['img_size'], dim=1).to(dtype=torch.float, device=device)
 
         predictions = model(images, img_scale, img_size).cpu()
-        del images, img_scale, img_size
         assert len(image_ids) == len(predictions)
 
+        if save_images:
+            images = (images * std + mean).clamp(0, 255).permute(0, 2, 3, 1)
+            images = images.cpu().numpy().astype(np.uint8)
+        else:
+            images = None
+        del img_scale, img_size
+
         for j, image_id in enumerate(image_ids):
-            # filter by min score
-            mask = predictions[j, :, 4] >= min_score
-            pred_i = predictions[j, mask]
+            scores_i = predictions[j, :, 4]
+            pred_i = predictions[j, scores_i >= min_score]
 
             df.iloc[i_image, 0] = image_id
             df.iloc[i_image, 1] = stringify(pred_i)
             i_image += 1
 
-        predictions = None
+            if save_images and s_image < num_images_to_save:
+                image = images[j]
+                draw_bboxes(image, pred_i[:, :4], (0, 255, 0), box_format='coco')
+                path = os.path.join(image_dir, '%s.png' % image_id)
+                save_image(image, path)
+                s_image += 1
+                del image
+
+            del pred_i, scores_i
+
+        del predictions
 
     logging.info("Saving {} to {}".format(conf.out.file, out_dir))
     path = os.path.join(out_dir, conf.out.file)

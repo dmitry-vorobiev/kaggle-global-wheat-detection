@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Dict, Optional
 
+from .common import mean_std_tensors
 from .train import build_process_batch_func
 from .typings import Device
 
@@ -36,7 +37,7 @@ def save_image(image, path):
     cv2.imwrite(path, image)
 
 
-def setup_visualizations(engine, model, dl, device, conf, force_run=True):
+def setup_visualizations(engine, model, dl, device, conf, force_run=False):
     # type: (Engine, nn.Module, DataLoader, Device, DictConfig, Optional[bool]) -> None
     vis_conf = conf.visualize
     save_dir = vis_conf.get("save_dir", os.path.join(os.getcwd(), 'images'))
@@ -50,11 +51,9 @@ def setup_visualizations(engine, model, dl, device, conf, force_run=True):
         os.makedirs(save_dir)
     elif os.path.isfile(save_dir):
         raise AttributeError("Unable to save images, not a valid directory: {}")
-
     logging.info("Saving visualizations to {}".format(save_dir))
 
-    mean = torch.tensor(list(conf.data.mean)).to(device).view(1, 3, 1, 1).mul_(255)
-    std = torch.tensor(list(conf.data.std)).to(device).view(1, 3, 1, 1).mul_(255)
+    mean, std = mean_std_tensors(conf.data, device)
 
     @engine.on(Events.EPOCH_COMPLETED(every=interval_ep))
     def _make_visualizations(eng: Engine):

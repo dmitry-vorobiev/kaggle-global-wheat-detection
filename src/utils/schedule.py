@@ -49,8 +49,8 @@ def combine_scheds(pcts, scheds):
 
 class OneCyclePolicy(object):
     """
-    External interface made partially compatible with `timm.scheduler.scheduler.Scheduler`
-    to avoid editing code to often, and the idea of stateless schedulers is very nice too.
+    External interface, partially compatible with `timm.scheduler.scheduler.Scheduler` and
+    following similar stateless design.
     """
     def __init__(self,
                  optimizer: torch.optim.Optimizer,

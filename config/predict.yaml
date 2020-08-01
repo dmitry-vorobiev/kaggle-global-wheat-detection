@@ -13,6 +13,8 @@ min_score: 0.06
 out:
   dir: /media/dmitry/data/global-wheat-detection/prediction/${now:%Y-%m-%d}/${now:%H-%M-%S}
   file: submission.csv
+  num_images: 32
+  image_dir: ./images
 
 data:
   mean: [0.485, 0.456, 0.406]
@@ -41,4 +43,4 @@ model:
     bench_name: predict
     pretrained: false
     pretrained_backbone: false
-  weights: /media/dmitry/data/weights/wheat/igor_001/checkpoint_4220_ema.pth
+  weights: /media/dmitry/data/weights/wheat/igor_001/checkpoint_4220_base.pth

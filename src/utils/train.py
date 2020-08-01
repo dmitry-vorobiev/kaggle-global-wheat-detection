@@ -12,6 +12,7 @@ from torch import nn
 from torch.optim.optimizer import Optimizer
 from typing import Any, Dict
 
+from .common import mean_std_tensors
 from .typings import Batch
 
 
@@ -38,8 +39,7 @@ def build_process_batch_func(conf: DictConfig, stage="train", device=None):
             return batch[0], _filter_targets(batch[1])
 
     else:
-        mean = torch.tensor(list(conf.mean)).to(device).view(1, 3, 1, 1).mul_(255)
-        std = torch.tensor(list(conf.std)).to(device).view(1, 3, 1, 1).mul_(255)
+        mean, std = mean_std_tensors(conf, device)
 
         def _handle(batch: Batch) -> Batch:
             images, target = batch
