@@ -67,8 +67,9 @@ def main(conf: DictConfig):
 
     if 'seed' in conf and conf.seed:
         torch.manual_seed(conf.seed)
+    if 'gpu' in conf:
+        torch.cuda.set_device(conf.gpu)
 
-    torch.cuda.set_device(conf.gpu)
     device = torch.device('cuda')
 
     out_dir = conf.out.get('dir', os.path.join(os.getcwd(), 'test_prediction'))
@@ -112,9 +113,10 @@ def main(conf: DictConfig):
         if save_images:
             images = (images * std + mean).clamp(0, 255).permute(0, 2, 3, 1)
             images = images.cpu().numpy().astype(np.uint8)
+            img_scale = img_scale.cpu().numpy()
         else:
-            images = None
-        del img_scale, img_size
+            images, img_scale = None, None
+        del img_size
 
         for j, image_id in enumerate(image_ids):
             scores_i = predictions[j, :, 4]
@@ -126,11 +128,12 @@ def main(conf: DictConfig):
 
             if save_images and s_image < num_images_to_save:
                 image = images[j]
-                draw_bboxes(image, pred_i[:, :4], (0, 255, 0), box_format='coco')
+                boxes = pred_i[:, :4] / img_scale[j]
+                draw_bboxes(image, boxes, (0, 255, 0), box_format='coco')
                 path = os.path.join(image_dir, '%s.png' % image_id)
                 save_image(image, path)
                 s_image += 1
-                del image
+                del image, boxes
 
             del pred_i, scores_i
 

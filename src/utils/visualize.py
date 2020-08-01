@@ -24,9 +24,9 @@ def draw_bboxes(image, bboxes, color, box_format='coco', yxyx=False):
     for box in bboxes:
         pt1 = tuple(box[:2])
         if box_format == 'coco':
-            pt2 = tuple(box[:2] + box[2:])
+            pt2 = tuple(box[:2] + box[2:4])
         elif box_format == 'pascal_voc':
-            pt2 = tuple(box[2:])
+            pt2 = tuple(box[2:4])
         else:
             raise AttributeError("Not supported: {}".format(box_format))
         cv2.rectangle(image, pt1, pt2, color, 1)
