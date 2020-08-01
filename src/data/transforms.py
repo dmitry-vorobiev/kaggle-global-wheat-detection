@@ -25,12 +25,13 @@ def resize_or_crop(height: int, width: int, interpolation=cv2.INTER_LINEAR):
 
 
 def affine(shift_limit=0.0625, scale_limit=0.1, rotate_limit=45, interpolation=cv2.INTER_LINEAR,
-           border_mode=cv2.BORDER_REFLECT_101, p=0.5,):
+           border_mode=cv2.BORDER_REFLECT_101, value=None, p=0.5):
     return A.ShiftScaleRotate(shift_limit=as_tuple(shift_limit),
                               scale_limit=as_tuple(scale_limit),
                               rotate_limit=as_tuple(rotate_limit),
                               interpolation=interpolation,
                               border_mode=border_mode,
+                              value=value,
                               p=p)
 
 

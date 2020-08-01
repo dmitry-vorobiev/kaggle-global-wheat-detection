@@ -97,7 +97,8 @@ data:
           scale_limit: [-0.05, 0.45]
           rotate_limit: 15
           interpolation: 2  # INTER_CUBIC
-          border_mode: 0
+          border_mode: 0  # BORDER_CONSTANT
+          value: 114  # mean
           p: 0.33
     affine_tfm_mosaic:
       affine:
@@ -107,7 +108,8 @@ data:
           scale_limit: [-0.3, 0.15]
           rotate_limit: 20
           interpolation: 2  # INTER_CUBIC
-          border_mode: 0
+          border_mode: 0  # BORDER_CONSTANT
+          value: 114  # mean
           p: 0.9
       crop:
         class: albumentations.CenterCrop

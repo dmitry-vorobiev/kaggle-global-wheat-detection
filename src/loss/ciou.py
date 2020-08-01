@@ -84,14 +84,15 @@ def ciou(box_a: Tensor, box_b: Tensor, eps=1e-8):
     inter_yx1 = torch.min(yx1_a, yx1_b)
     inter_hw = torch.clamp_min(inter_yx1 - inter_yx0, 0)
 
-    iou = calc_iou(hw_a, hw_b, inter_hw, eps=torch.tensor(eps))
+    eps = torch.tensor(eps)
+    iou = calc_iou(hw_a, hw_b, inter_hw, eps)
     del inter_yx0, inter_yx1, inter_hw
 
     c_diag = calc_closing_diag(yx0_a, yx1_a, yx0_b, yx1_b)
     inter_diag = torch.pow(c_b - c_a, 2).sum(dim=1)
     u = inter_diag / (c_diag + eps)
-    del inter_diag, c_a, c_b, yx0_a, yx1_a, yx0_b, yx1_b
+    del inter_diag, c_diag, c_a, c_b, yx0_a, yx1_a, yx0_b, yx1_b
 
-    v = calc_shape_consistency(hw_a, hw_b, iou, eps=torch.tensor(eps))
+    v = calc_shape_consistency(hw_a, hw_b, iou, eps)
     ciou = iou - u - v
     return torch.clamp(ciou, -1, 1)
