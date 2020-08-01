@@ -150,8 +150,6 @@ model:
     checkpoint_path: ''
 
 optim:
-  params:
-    lr: 0.004
   clip_grad: 10.0
   step_interval: 4 # bs = 4 * 2 gpus; eff_bs = 32
 
