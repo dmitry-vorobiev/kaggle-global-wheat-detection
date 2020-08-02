@@ -19,7 +19,8 @@ from typing import Dict, List, Optional
 
 from data.sampler import CustomSampler
 from data.utils import create_train_loader, create_val_loader
-from utils.train import build_optimizer, build_process_batch_func, setup_checkpoints, setup_ema
+from utils.train import build_optimizer, build_process_batch_func, resume_from_checkpoint, \
+    setup_checkpoints, setup_ema
 from utils.typings import Batch, Device, FloatDict
 from utils.visualize import setup_visualizations
 
@@ -291,13 +292,7 @@ def run(conf: DictConfig, local_rank=0, distributed=False):
         if master_node:
             logging.info("Resume from a checkpoint: {}".format(cp.load))
             trainer.add_event_handler(Events.STARTED, _upd_pbar_iter_from_cp, pbar)
-        to_load = {k: v for k, v in to_save.items() if v is not None}
-        if cp.drop_state:
-            # we might want to swap optimizer or to reset it state
-            drop_keys = set(cp.drop_state)
-            to_load = {k: v for k, v in to_load.items() if k not in drop_keys}
-        Checkpoint.load_objects(to_load=to_load,
-                                checkpoint=torch.load(cp.load, map_location=device))
+        resume_from_checkpoint(to_save, cp, device=device)
         state = trainer.state
         # epoch counter start from 1
         lr_scheduler.step(state.epoch - 1)

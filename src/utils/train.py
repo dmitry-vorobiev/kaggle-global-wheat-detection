@@ -13,7 +13,7 @@ from torch.optim.optimizer import Optimizer
 from typing import Any, Dict
 
 from .common import mean_std_tensors
-from .typings import Batch
+from .typings import Batch, Device
 
 
 def humanize_time(timestamp: float) -> str:
@@ -78,6 +78,25 @@ def setup_checkpoints(trainer, obj_to_save, epoch_length, conf):
         if cp_iter < 1 or epoch_length % cp_iter:
             save_event = Events.EPOCH_COMPLETED(every=cp_epoch)
             trainer.add_event_handler(save_event, make_checkpoint)
+
+
+def resume_from_checkpoint(to_save, conf, device=None):
+    # type: (Dict[str, Any], DictConfig, Device) -> None
+    to_load = {k: v for k, v in to_save.items() if v is not None}
+
+    if conf.drop_state:
+        # we might want to swap optimizer or to reset it state
+        drop_keys = set(conf.drop_state)
+        to_load = {k: v for k, v in to_load.items() if k not in drop_keys}
+
+    checkpoint = torch.load(conf.load, map_location=device)
+    ema_key = "model_ema"
+    if ema_key in to_load and ema_key not in checkpoint:
+        checkpoint[ema_key] = checkpoint["model"]
+        logging.warning("There are no EMA weights in the checkpoint. "
+                        "Using saved model weights as a starting point for the EMA.")
+
+    Checkpoint.load_objects(to_load=to_load, checkpoint=checkpoint)
 
 
 def setup_ema(conf: DictConfig, model: nn.Module, device=None, master_node=False):
