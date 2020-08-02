@@ -5,8 +5,8 @@ hydra:
 defaults:
   - model/effdet/base
   - model: effdet/tf_d3
-  - optim: adamw
-  - scheduler: one_cycle
+  - optim: sgd
+  - scheduler: one_cycle_sgd
 
 gpu: 1
 seed: 333
@@ -151,6 +151,9 @@ model:
       pretrained_backbone: false
       box_loss: ciou
       box_loss_weight: 50.0
+      custom_nms: false
+      nms_max_iou: 0.3
+      nms_min_score: 0.05
     bench_name: train
     pretrained: true
     checkpoint_path: ''
@@ -185,7 +188,7 @@ visualize:
   interval_ep: 10
 
 checkpoints:
-  load: ~
+  load: /media/dmitry/data/weights/wheat/007_ciou/checkpoint_23604.pth
   save_dir: ~
   interval_ep: 1
   interval_it: 500
