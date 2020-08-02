@@ -8,7 +8,7 @@ fp16: false
 
 out:
   num_images: 10266 # 3 times the original train length
-  dir: /media/dmitry/data/global-wheat-detection/synthetic/0_225_x2/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  dir: /media/dmitry/data/global-wheat-detection/synthetic/0_30_x2_5/${now:%Y-%m-%d}/${now:%H-%M-%S}
   ext: jpg
 
 data:
@@ -20,14 +20,14 @@ data:
     csv: /media/dmitry/data/global-wheat-detection/train.csv
     source: ~
   loader:
-    batch_size: 3
+    batch_size: 2
     workers: 2
   transforms: ~
   upsample:
-    factor: 2
+    factor: 2.5
     method: bicubic
   downsample:
-    factor: 2
+    factor: 2.5
     method: area
 
 model:
@@ -35,5 +35,5 @@ model:
   params:
     img_channels: 3
     style_dim: 100
-  alpha: 0.225
+  alpha: 0.3
   weights: /media/dmitry/data/weights/style_augment_PBN_100.pth
