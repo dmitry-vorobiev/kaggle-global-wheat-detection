@@ -5,9 +5,8 @@ hydra:
 defaults:
   - model/effdet/base
   - model: effdet/tf_d3
-  - optim: sgd
+  - optim: adamw
   - scheduler: one_cycle
-#  - scheduler: cosine
 
 gpu: 1
 seed: 333
@@ -48,7 +47,7 @@ data:
       box_format: yxyx
     bbox_params:
       format: pascal_voc
-      min_visibility: 0.1
+      min_visibility: 0.05
     orig_images_ratio: 0.5
     loader:
       # batch size per each device
@@ -57,7 +56,7 @@ data:
       prefetch: true
     transforms:
       resize:
-        class: data.transforms.resize_or_crop
+        class: data.transforms.resize
         params:
           height: 896
           width: 896
@@ -71,45 +70,50 @@ data:
         class: albumentations.RandomRotate90
         params:
           p: 0.75
-      color:
-        class: data.transforms.color_jitter
+      cutout:
+        class: albumentations.CoarseDropout
         params:
-          brightness_limit: 0.2
-          contrast_limit: 0.2
-          brightness_by_max: true
-          r_shift_limit: 30
-          g_shift_limit: 30
-          b_shift_limit: 30
-          hue_shift_limit: 20
-          sat_shift_limit: 50
-          val_shift_limit: 30
-          p: 0.75
-      enhance:
-        class: data.transforms.enhancer
+          min_holes: 3
+          max_holes: 12
+          min_height: 60
+          max_height: 120
+          min_width: 60
+          max_width: 120
+          fill_value: 114
+          p: 0.5
+      hsv_shift:
+        class: albumentations.HueSaturationValue
         params:
-          noise_var_limit: [25.0, 60.0]
-          p: 0.25
+          # HSV values are adapted from yolo5: 0.015, 0.7, 0.4
+          hue_shift_limit: 10
+          sat_shift_limit: 120
+          val_shift_limit: 100
+          p: 0.9
+      clahe:
+        class: albumentations.CLAHE
+        params:
+          p: 0.1
     affine_tfm:
       affine:
         class: data.transforms.affine
         params:
-          shift_limit: 0
-          scale_limit: [-0.05, 0.45]
-          rotate_limit: 15
+          shift_limit: 0.1
+          scale_limit: [-0.3, 0.5]
+          rotate_limit: 30
           interpolation: 2  # INTER_CUBIC
           border_mode: 0  # BORDER_CONSTANT
-          value: 114  # mean
-          p: 0.33
+          value: [124, 116, 104]  # mean
+          p: 0.75
     affine_tfm_mosaic:
       affine:
         class: data.transforms.affine
         params:
-          shift_limit: 0.03
-          scale_limit: [-0.3, 0.15]
-          rotate_limit: 20
+          shift_limit: 0.1
+          scale_limit: [-0.5, 0.3]
+          rotate_limit: 15
           interpolation: 2  # INTER_CUBIC
           border_mode: 0  # BORDER_CONSTANT
-          value: 114  # mean
+          value: [124, 116, 104]  # mean
           p: 0.9
       crop:
         class: albumentations.CenterCrop
@@ -157,7 +161,7 @@ optim:
 
 # EMA of the model weights, alpha - decay rate
 smoothing:
-  enabled: true
+  enabled: false
   use_cpu: true
   alpha: 0.995
   interval_it: 1

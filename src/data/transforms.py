@@ -9,17 +9,20 @@ def as_tuple(v):
     return tuple(v) if hasattr(v, '__getitem__') else v
 
 
-def resize_or_crop(height: int, width: int, interpolation=cv2.INTER_LINEAR):
-    def _build_resize(method):
+def resize(height: int, width: int, interpolation=cv2.INTER_LINEAR):
+    def _build(method):
         return A.Resize(height, width, interpolation=method, p=1.0)
 
     if hasattr(interpolation, '__iter__'):
-        resize = A.OneOf(list(map(_build_resize, interpolation)), p=1.0)
+        tfm = A.OneOf(list(map(_build, interpolation)), p=1.0)
     else:
-        resize = _build_resize(interpolation)
+        tfm = _build(interpolation)
+    return tfm
 
+
+def resize_or_crop(height: int, width: int, interpolation=cv2.INTER_LINEAR):
     return A.OneOf([
-        resize,
+        resize(height, width, interpolation),
         A.RandomCrop(height, width, p=1.0),
     ], p=1.0)
 
@@ -31,7 +34,7 @@ def affine(shift_limit=0.0625, scale_limit=0.1, rotate_limit=45, interpolation=c
                               rotate_limit=as_tuple(rotate_limit),
                               interpolation=interpolation,
                               border_mode=border_mode,
-                              value=value,
+                              value=as_tuple(value),
                               p=p)
 
 
@@ -58,8 +61,6 @@ def enhancer(clip_limit=4.0, tile_grid_size=(8, 8), noise_var_limit=(10.0, 50.0)
              noise_mean=0, p=0.5):
     return A.OneOf([
         A.CLAHE(clip_limit=clip_limit, tile_grid_size=as_tuple(tile_grid_size), p=1.0),
-        A.GaussNoise(var_limit=as_tuple(noise_var_limit), mean=noise_mean, p=1.0)
+        A.GaussNoise(var_limit=as_tuple(noise_var_limit), mean=noise_mean, p=1.0),
+        # A.IAASharpen()
     ], p=p)
-
-
-

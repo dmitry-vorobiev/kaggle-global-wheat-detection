@@ -102,9 +102,6 @@ def _apply_transforms(image, bboxes, transforms=None):
             bboxes = np.stack(bboxes)[:, :4]
         else:
             bboxes = np.empty((0, 4), dtype=np.float32)
-    else:
-        image = torch.from_numpy(image)
-        bboxes = torch.from_numpy(bboxes)[:, :4]
 
     return image, bboxes, (H0, W0)
 
