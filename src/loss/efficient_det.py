@@ -31,8 +31,10 @@ def ciou_loss(inp, target, weights=None, size_average=True):
     assert inp.shape == target.shape
     N, H, W, A = inp.shape
     A = A // 4
-    target = target.to(inp.dtype)
-    loss = 1 - ciou(inp.reshape(-1, 4), target.reshape(-1, 4)).reshape(N, H, W, A)
+    # TODO: Why the inp is float32 and the target is float16 when the amp mode is on?
+    inp = inp.view(-1, 4)
+    target = target.reshape(-1, 4).to(inp.dtype)
+    loss = 1 - ciou(inp, target).view(N, H, W, A)
     if weights is not None:
         loss *= weights.reshape(N, H, W, A, 4).any(dim=-1)
     return loss.mean() if size_average else loss.sum()
