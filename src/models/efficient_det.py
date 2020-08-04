@@ -56,7 +56,7 @@ def create_model_from_config(config, bench_name='', pretrained=False, checkpoint
 
 def generate_detections_cluster_nms(
         cls_outputs, box_outputs, anchor_boxes, indices, img_scale, img_size, min_score,
-        iou_threshold, max_det_per_image: int = MAX_DETECTIONS_PER_IMAGE):
+        iou_threshold, max_det_per_image: int = 200):
     """Generates detections with RetinaNet model outputs and anchors.
 
     Args:

@@ -53,7 +53,7 @@ def dist_iou_ab(box_a: Tensor, box_b: Tensor, eps=EPS):
     # del clos_yx0, clos_yx1, clos_hw, center_a, center_b
 
     dist = inter_diag / (clos_diag + eps)
-    return iou - dist ** 0.95
+    return iou - dist ** 0.9
 
 
 def cluster_nms_dist_iou(boxes: Tensor, scores: Tensor, iou_threshold=0.5, top_k=200):
@@ -73,13 +73,14 @@ def cluster_nms_dist_iou(boxes: Tensor, scores: Tensor, iou_threshold=0.5, top_k
     iou = iou.triu_(diagonal=1)
     best_iou = torch.zeros_like(idx)
 
+    iou_b = iou
     for i in range(top_k):
-        iou0 = iou
-        best_iou, _ = torch.max(iou, dim=0)
+        iou_a = iou_b
+        best_iou, _ = torch.max(iou_b, dim=0)
         # keep far away boxes
-        keep = (best_iou <= iou_threshold)[:, None].expand_as(iou)
-        iou = torch.where(keep, iou, torch.zeros_like(iou))
-        if (iou == iou0).all():
+        keep = (best_iou <= iou_threshold)[:, None].expand_as(iou_b)
+        iou_b = torch.where(keep, iou, torch.zeros_like(iou_b))
+        if iou_b.eq(iou_a).all():
             break
 
     idx = idx[best_iou <= iou_threshold]

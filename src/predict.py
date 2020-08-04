@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+from nms.cluster_nms import cluster_nms_dist_iou
 from utils.common import mean_std_tensors
 from utils.tta import combine_tta, ensemble_predictions
 from utils.visualize import draw_bboxes, save_image
@@ -116,7 +117,8 @@ def main(conf: DictConfig):
         del images_gpu
 
         if use_tta:
-            predictions = [predictions]
+            # xywh -> xyxy
+            predictions[:, :, [2, 3]] += predictions[:, :, [0, 1]]
 
             for tta in combine_tta(1024):
                 images_tta = tta(images)
@@ -129,15 +131,51 @@ def main(conf: DictConfig):
                 # xyxy -> xywh
                 # boxes_tta[:, [2, 3]] -= boxes_tta[:, [0, 1]]
                 predictions_tta[:, :, :4] = torch.tensor(boxes_tta).reshape(N, -1, 4)
-                predictions.append(predictions_tta)
-                # predictions = torch.cat([predictions, predictions_tta], dim=1)
+                predictions = torch.cat([predictions, predictions_tta], dim=1)
                 del images_gpu, images_tta, predictions_tta, boxes_tta
 
-            predictions = ensemble_predictions(predictions, iou_threshold=iou_threshold,
-                                               skip_box_threshold=skip_threshold)
+            # fused = []
+            # for i in range(len(predictions)):
+            #     boxes = predictions[i, :, :4]
+            #     scores = predictions[i, :, 4:5]
+            #     boxes, scores, classes = cluster_nms_dist_iou(
+            #         boxes, scores, iou_threshold=iou_threshold, top_k=200)
+            #     # xyxy -> xywh
+            #     boxes[:, [2, 3]] -= boxes[:, [0, 1]]
+            #     scores = scores[:, None]
+            #     classes = classes[:, None].float()
+            #     fused_i = torch.cat([boxes, scores, classes], dim=1)
+            #     print(len(fused_i))
+            #     fused.append(fused_i)
+
+            from torchvision.ops import nms
+
+            fused = []
+            for i in range(len(predictions)):
+                boxes = predictions[i, :, :4]
+                scores = predictions[i, :, 4]
+                keep = scores >= min_score
+                boxes = boxes[keep]
+                scores = scores[keep, None]
+                print(len(boxes))
+
+                top_idx = nms(boxes, scores, iou_threshold)
+                boxes = boxes[top_idx]
+                scores = scores[top_idx]
+
+                # xyxy -> xywh
+                boxes[:, [2, 3]] -= boxes[:, [0, 1]]
+                classes = torch.ones_like(scores)
+                fused_i = torch.cat([boxes, scores, classes], dim=1)
+                print(len(fused_i))
+                print("------")
+                fused.append(fused_i)
+
+            predictions = fused
+            # # xyxy -> xywh
+            # predictions[:, :, [2, 3]] -= predictions[:, :, [0, 1]]
 
         del img_size
-
         if save_images:
             images = images.permute(0, 2, 3, 1)
             images = images.cpu().numpy().astype(np.uint8).copy()
