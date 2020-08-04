@@ -8,7 +8,12 @@ defaults:
 
 gpu: 0
 seed: ~
-min_score: 0.05
+min_score: 0.08
+
+tta:
+  enabled: true
+  iou_threshold: 0.55
+  skip_threshold: 0.02
 
 out:
   dir: /media/dmitry/data/global-wheat-detection/prediction/${now:%Y-%m-%d}/${now:%H-%M-%S}

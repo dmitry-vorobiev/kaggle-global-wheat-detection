@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from utils.common import mean_std_tensors
+from utils.tta import combine_tta, ensemble_predictions
 from utils.visualize import draw_bboxes, save_image
 
 
@@ -94,6 +95,9 @@ def main(conf: DictConfig):
         logging.info("Saving images to {}".format(image_dir))
 
     min_score = conf.get("min_score", -1)
+    use_tta = conf.tta.enabled
+    iou_threshold = conf.tta.iou_threshold
+    skip_threshold = conf.tta.skip_threshold
     mean, std = mean_std_tensors(conf.data, device)
 
     files = os.listdir(conf.data.params.image_dir)
@@ -102,25 +106,48 @@ def main(conf: DictConfig):
     s_image = 0
 
     for images, image_ids, metadata in tqdm(dl, desc="Predict"):
-        images = images.to(device).float().sub_(mean).div_(std)
+        images_gpu = images.to(device).float().sub_(mean).div_(std)
         img_scale = metadata['img_scale'].to(dtype=torch.float, device=device)
         assert len(metadata['img_size']) == 2
         img_size = torch.stack(metadata['img_size'], dim=1).to(dtype=torch.float, device=device)
 
-        predictions = model(images, img_scale, img_size).cpu()
+        predictions = model(images_gpu, img_scale, img_size).cpu()
         assert len(image_ids) == len(predictions)
+        del images_gpu
+
+        if use_tta:
+            predictions = [predictions]
+
+            for tta in combine_tta(1024):
+                images_tta = tta(images)
+                images_gpu = images_tta.to(device).float().sub_(mean).div_(std)
+                predictions_tta = model(images_gpu, img_scale, img_size).cpu()
+                N = images_gpu.size(0)
+                boxes_tta = predictions_tta[..., :4].reshape(-1, 4)
+                boxes_tta = tta.prepare_boxes(boxes_tta, box_format="coco")
+                boxes_tta = tta.decode(boxes_tta)
+                # xyxy -> xywh
+                # boxes_tta[:, [2, 3]] -= boxes_tta[:, [0, 1]]
+                predictions_tta[:, :, :4] = torch.tensor(boxes_tta).reshape(N, -1, 4)
+                predictions.append(predictions_tta)
+                # predictions = torch.cat([predictions, predictions_tta], dim=1)
+                del images_gpu, images_tta, predictions_tta, boxes_tta
+
+            predictions = ensemble_predictions(predictions, iou_threshold=iou_threshold,
+                                               skip_box_threshold=skip_threshold)
+
+        del img_size
 
         if save_images:
-            images = (images * std + mean).clamp(0, 255).permute(0, 2, 3, 1)
-            images = images.cpu().numpy().astype(np.uint8)
+            images = images.permute(0, 2, 3, 1)
+            images = images.cpu().numpy().astype(np.uint8).copy()
             img_scale = img_scale.cpu().numpy()
         else:
             images, img_scale = None, None
-        del img_size
 
         for j, image_id in enumerate(image_ids):
-            scores_i = predictions[j, :, 4]
-            pred_i = predictions[j, scores_i >= min_score]
+            scores_i = predictions[j][:, 4]
+            pred_i = predictions[j][scores_i >= min_score]
 
             df.iloc[i_image, 0] = image_id
             df.iloc[i_image, 1] = stringify(pred_i)
