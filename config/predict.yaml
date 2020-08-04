@@ -11,9 +11,9 @@ seed: ~
 min_score: 0.065
 
 tta:
-  enabled: false
-  iou_threshold: 0.55
-  skip_threshold: 0.0
+  enabled: true
+  iou_threshold: 0.75
+  skip_threshold: 0.02
 
 out:
   dir: /media/dmitry/data/global-wheat-detection/prediction/${now:%Y-%m-%d}/${now:%H-%M-%S}

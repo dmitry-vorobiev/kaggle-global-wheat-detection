@@ -116,6 +116,7 @@ def main(conf: DictConfig):
 
         if use_tta:
             from utils.tta import combine_tta, ensemble_predictions
+            predictions[:, :, [2, 3]] += predictions[:, :, [0, 1]]
             predictions = [predictions]
 
             for tta in combine_tta(1024):
@@ -127,7 +128,7 @@ def main(conf: DictConfig):
                 boxes_tta = tta.prepare_boxes(boxes_tta, box_format="coco")
                 boxes_tta = tta.decode(boxes_tta)
                 predictions_tta[:, :, :4] = torch.tensor(boxes_tta).reshape(N, -1, 4)
-                predictions = torch.cat([predictions, predictions_tta], dim=1)
+                predictions.append(predictions_tta)
                 del images_gpu, images_tta, predictions_tta, boxes_tta
 
             predictions = ensemble_predictions(predictions, iou_threshold=iou_threshold,

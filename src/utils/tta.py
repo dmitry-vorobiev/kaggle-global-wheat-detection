@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from ensemble_boxes.ensemble_boxes_wbf import weighted_boxes_fusion
-from itertools import product
+from itertools import combinations
 from torch import Tensor
 from typing import List
 
@@ -91,33 +91,30 @@ class ComposeTTA(BaseTTA):
             images = transform(images)
         return images
 
-    @staticmethod
-    def sanitize_boxes(boxes):
+    def sanitize_boxes(self, boxes):
         result_boxes = boxes.copy()
         result_boxes[:, 0] = np.min(boxes[:, [0, 2]], axis=1)
         result_boxes[:, 2] = np.max(boxes[:, [0, 2]], axis=1)
         result_boxes[:, 1] = np.min(boxes[:, [1, 3]], axis=1)
         result_boxes[:, 3] = np.max(boxes[:, [1, 3]], axis=1)
-        return result_boxes
+        return np.clip(result_boxes, 0, self.transforms[0].image_size)
 
     def decode(self, boxes):
         for transform in reversed(self.transforms):
             boxes = transform.decode(boxes)
-        return boxes
-        # return self.sanitize_boxes(boxes)
+        return self.sanitize_boxes(boxes)
 
 
 def combine_tta(image_size: int):
     tta_pipes = []
-    for tta_comb in product([HorizontalFlipTTA(image_size), None],
-                            [VerticalFlipTTA(image_size), None],
-                            [Rotate90TTA(image_size), None]):
+    ttas = [HorizontalFlipTTA(image_size), VerticalFlipTTA(image_size), Rotate90TTA(image_size)]
+    for tta_comb in combinations(ttas, 2):
         tta_comb = ComposeTTA(list(filter(bool, tta_comb)))
         tta_pipes.append(tta_comb)
     return tta_pipes
 
 
-def ensemble_predictions(predictions, image_size=1024, iou_threshold=0.45, skip_box_threshold=0.04,
+def ensemble_predictions(predictions, image_size=1024, iou_threshold=0.5, skip_box_threshold=0.0,
                          box_format="coco"):
     assert predictions[0].ndim == 3
     assert predictions[0].size(2) == 6
