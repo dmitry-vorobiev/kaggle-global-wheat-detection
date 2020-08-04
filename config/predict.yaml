@@ -4,16 +4,16 @@ hydra:
 
 defaults:
   - model/effdet/base
-  - model: effdet/tf_d3
+  - model: effdet/tf_d5_640
 
 gpu: 0
 seed: ~
-min_score: 0.08
+min_score: 0.065
 
 tta:
-  enabled: true
+  enabled: false
   iou_threshold: 0.55
-  skip_threshold: 0.02
+  skip_threshold: 0.0
 
 out:
   dir: /media/dmitry/data/global-wheat-detection/prediction/${now:%Y-%m-%d}/${now:%H-%M-%S}
@@ -35,8 +35,8 @@ data:
     resize:
       class: albumentations.Resize
       params:
-        height: 896
-        width: 896
+        height: 640
+        width: 640
         interpolation: 2  # INTER_CUBIC
 
 model:
@@ -45,7 +45,10 @@ model:
     config:
       num_classes: 1
       pretrained_backbone: false
+      custom_nms: true
+      nms_max_iou: 0.3
+      nms_min_score: 0.05
     bench_name: predict
     pretrained: false
     pretrained_backbone: false
-  weights: /media/dmitry/data/weights/wheat/007_ciou/checkpoint_25290_ema.pth
+  weights: /media/dmitry/data/weights/wheat/009/checkpoint_17703_ema.pth
