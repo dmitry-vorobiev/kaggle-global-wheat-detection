@@ -4,12 +4,12 @@ hydra:
 
 defaults:
   - model/effdet/base
-  - model: effdet/tf_d3
-  - optim: sgd
-  - scheduler: one_cycle_sgd
+  - model: effdet/tf_d5_640
+  - optim: adamw
+  - scheduler: one_cycle_adam
 
 gpu: 1
-seed: 333
+seed: 709
 # use Nvidia's Apex package
 use_apex: true
 
@@ -36,6 +36,7 @@ data:
       gen_image_dirs:
         - /media/dmitry/data/global-wheat-detection/synthetic/0_20_x2/2020-07-30/11-52-23
         - /media/dmitry/data/global-wheat-detection/synthetic/0_225_x2/2020-07-31/12-12-11
+        - /media/dmitry/data/global-wheat-detection/synthetic/0_225_x2_5/2020-08-01/15-52-14
         - /media/dmitry/data/global-wheat-detection/synthetic/0_25_x2/2020-07-30/12-55-50
         - /media/dmitry/data/global-wheat-detection/synthetic/0_275_x2/2020-07-30/20-45-00
         - /media/dmitry/data/global-wheat-detection/synthetic/0_30_x2/2020-07-30/15-01-01
@@ -43,7 +44,7 @@ data:
         - /media/dmitry/data/global-wheat-detection/synthetic/0_325_x2/2020-07-31/10-54-53
       source: ~
       show_progress: false
-      p_mosaic: 0.45
+      p_mosaic: 0.5
       mosaic_num_orig: 2
       box_format: yxyx
     bbox_params:
@@ -59,8 +60,8 @@ data:
       resize:
         class: data.transforms.resize
         params:
-          height: 896
-          width: 896
+          height: 640
+          width: 640
           # INTER_CUBIC, INTER_AREA
           interpolation: [2, 3]
       flip:
@@ -119,8 +120,8 @@ data:
       crop:
         class: albumentations.CenterCrop
         params:
-          height: 896
-          width: 896
+          height: 640
+          width: 640
   val:
     class: data.dataset.WheatDataset
     params:
@@ -140,8 +141,8 @@ data:
       resize:
         class: albumentations.Resize
         params:
-          height: 896
-          width: 896
+          height: 640
+          width: 640
           interpolation: 2  # INTER_CUBIC
 
 model:
@@ -152,7 +153,7 @@ model:
       pretrained_backbone: false
       box_loss: ciou
       box_loss_weight: 50.0
-      custom_nms: false
+      custom_nms: true
       nms_max_iou: 0.3
       nms_min_score: 0.05
     bench_name: train
@@ -165,9 +166,9 @@ optim:
 
 # EMA of the model weights, alpha - decay rate
 smoothing:
-  enabled: false
+  enabled: true
   use_cpu: true
-  alpha: 0.995
+  alpha: 0.999
   interval_it: 1
 
 train:
@@ -189,7 +190,7 @@ visualize:
   interval_ep: 10
 
 checkpoints:
-  load: /media/dmitry/data/weights/wheat/007_ciou/checkpoint_23604.pth
+  load: /media/dmitry/data/outputs/2020-08-04/21-02-34/checkpoint_17703.pth
   save_dir: ~
   interval_ep: 1
   interval_it: 500
