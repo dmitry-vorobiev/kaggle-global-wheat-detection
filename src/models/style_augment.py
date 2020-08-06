@@ -1,9 +1,13 @@
+"""
+Original:
+https://github.com/philipjackson/style-augmentation
+"""
 import torch
 import torch.nn.functional as F
 
 from collections import OrderedDict
 from torch import nn, Tensor
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 from .inception import Inception3_Encoder
 from ._utils import FloatInterval, interval_to_tensor

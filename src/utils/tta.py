@@ -1,8 +1,13 @@
+"""
+The code comes from Alex Shonenkov (https://www.kaggle.com/shonenkov) and is slightly adapted.
+
+Original:
+https://www.kaggle.com/shonenkov/wbf-over-tta-single-model-efficientdet
+"""
 import numpy as np
 import torch
 from ensemble_boxes.ensemble_boxes_wbf import weighted_boxes_fusion
 from itertools import combinations
-from torch import Tensor
 from typing import List
 
 
