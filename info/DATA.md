@@ -79,15 +79,3 @@ ds = ExtendedWheatDataset(image_dir, csv_path,
 sampler = CustomSampler(ds, orig_images_ratio=0.5)
 dl = torch.utils.data.DataLoader(ds, sampler=sampler, batch_size=8, collate_fn=basic_collate)
 ```
-
-## Citation
-
-```bibtex
-@inproceedings{jackson2019style,
-  title={Style Augmentation: Data Augmentation via Style Randomization},
-  author={Jackson, Philip T and Atapour-Abarghouei, Amir and Bonner, Stephen and Breckon, Toby P and Obara, Boguslaw},
-  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition Workshops},
-  pages={83--92},
-  year={2019}
-}
-```
