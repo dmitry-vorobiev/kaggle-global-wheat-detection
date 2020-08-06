@@ -60,13 +60,12 @@ at you for passing unrecognized arguments.
    year      = {2020},
 }
 
-@Inproceedings{zheng2020distance,
-  author={Roman Solovyev, Weimin Wang},
-  title={Weighted Boxes Fusion: ensembling boxes for object detection models},
-  journal={ArXiv e-prints},
-  archivePrefix={arXiv},
-  eprint={1910.13302},
-  primaryClass={abs},
-  year={2019},
+@misc{solovyev2019weighted,
+    title={Weighted Boxes Fusion: ensembling boxes for object detection models},
+    author={Roman Solovyev and Weimin Wang},
+    year={2019},
+    eprint={1910.13302},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV}
 }
 ```
